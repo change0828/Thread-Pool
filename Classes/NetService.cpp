@@ -1,23 +1,61 @@
-﻿#include "NetServer.h"
+﻿#include "NetService.h"
+#include "SocketThread.h"
 
 #include <string.h>
 
-
 using namespace std;
 
+CmdHandleDelegate::CmdHandleDelegate()
+{
+}
 
-NetServer *NetServer::_instance = nullptr;
+CmdHandleDelegate::~CmdHandleDelegate()
+{
+}
 
-NetServer* NetServer::getInstance()
+void CmdHandleDelegate::setReceiveCmd()
+{
+	isReceiveCmd = true;
+}
+
+void CmdHandleDelegate::IntoDealNetCommand(void)
+{
+	NetService::getInstance()->addDelegate(this);
+}
+
+void CmdHandleDelegate::LeaveNetCommand(void)
+{
+	NetService::getInstance()->removeDelegate(this);
+}
+
+bool CmdHandleDelegate::cmdHandle(CPackage * mCmd)
+{
+	return false;
+}
+
+bool CmdHandleDelegate::notifyResponseState(CPackage * mCmd)
+{
+	return false;
+}
+
+
+void CmdHandleDelegate::setBlockCmd()
+{
+	isReceiveCmd = false;
+}
+
+NetService *NetService::_instance = nullptr;
+
+NetService* NetService::getInstance()
 {
 	if (nullptr==_instance)
 	{
-		_instance = new NetServer();
+		_instance = new NetService();
 	}
 	return _instance;
 }
 
-void NetServer::purge()
+void NetService::purge()
 {
 	if (nullptr!=_instance)
 	{
@@ -26,16 +64,16 @@ void NetServer::purge()
 	}
 }
 
-NetServer::NetServer(void)
+NetService::NetService(void)
 {
 }
 
-NetServer::~NetServer(void)
+NetService::~NetService(void)
 {
-	_cleanNet();
+	//_cleanNet();
 }
 
-void NetServer::newSocket(const char *hostname, const char* port, int mTag)
+void NetService::newSocket(const char *hostname, const char* port, int mTag)
 {
 	SocketThread* _Socket = this->getSocketByTag(mTag);
 	if (nullptr==_Socket)
@@ -47,7 +85,7 @@ void NetServer::newSocket(const char *hostname, const char* port, int mTag)
 	}
 }
 
-SocketThread* NetServer::getSocketByTag(int mTag)
+SocketThread* NetService::getSocketByTag(int mTag)
 {
 	vector<SocketThread*>::iterator itr = sokcetArray.begin();
 	for (; itr != sokcetArray.end(); itr++)
@@ -61,14 +99,14 @@ SocketThread* NetServer::getSocketByTag(int mTag)
 	return nullptr;
 }
 
-void NetServer::addSocket(SocketThread * mSocket,int mTag)
+void NetService::addSocket(SocketThread * mSocket,int mTag)
 {
 	if (this->getSocketByTag(mTag) == NULL) {
 		sokcetArray.push_back(mSocket);
 	}
 }
 
-void NetServer::removeSocket(int mTag)
+void NetService::removeSocket(int mTag)
 {
 	vector<SocketThread*>::iterator itr = sokcetArray.begin();
 	for (; itr != sokcetArray.end(); itr++)
@@ -91,7 +129,7 @@ void NetServer::removeSocket(int mTag)
 	}
 }
 
-void NetServer::clearSockets()
+void NetService::clearSockets()
 {
 	vector<SocketThread*>::iterator itr = sokcetArray.begin();
 	for (; itr != sokcetArray.end(); itr++)
@@ -109,7 +147,7 @@ void NetServer::clearSockets()
 	sokcetArray.clear();
 }
 
-void NetServer::sendData(CPackage *mData)
+void NetService::sendData(CPackage *mData)
 {
 	int _tag = mData->getTag();
 

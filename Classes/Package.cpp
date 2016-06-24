@@ -75,7 +75,7 @@ type_byte CPackage::readByte(void)
 
 void CPackage::pushByte(const char * data, type_word size)
 {
-	type_word len = strlen(data);
+	type_word len = (type_word)strlen(data);
 	memcpy((void*)(buff()+m_nWrPtr), data, len);
 	memset((void*)(buff()+m_nWrPtr+len),0,size-len);
 	m_nWrPtr += size;

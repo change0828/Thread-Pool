@@ -2,8 +2,8 @@
  *  @Created by change on 16-06-08
  *  @Copyright 2016 icoole. All rights reserved.
  */
-#ifndef __NETSERVER_H__
-#define __NETSERVER_H__
+#ifndef __NetService_H__
+#define __NetService_H__
 
 #include "Package.h"
 #include <vector>
@@ -59,10 +59,10 @@ private:
 
 class SocketThread;
 
-class NetServer
+class NetService
 {
 public:
-	static NetServer* getInstance();
+	static NetService* getInstance();
 	static void purge();
 
 
@@ -82,13 +82,13 @@ public:
 	void sendData(CPackage *mData);
 
 private:
-	NetServer(void);
-	~NetServer(void);
+	NetService(void);
+	~NetService(void);
 
 	/** 断开网络*/
 	void _cleanNet();
 private:
-	static NetServer *_instance;
+	static NetService *_instance;
 
 
 	std::vector<SocketThread*> sokcetArray;

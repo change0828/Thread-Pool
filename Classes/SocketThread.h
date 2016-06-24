@@ -30,7 +30,6 @@
 #define SOCKET_OK 0
 
 // thread
-
 #include <thread>
 #include <mutex>
 #include <condition_variable>
@@ -44,8 +43,8 @@ using namespace std;
 class SocketThread
 {
 public:
-	explicit SocketThread(const char * hostname,const char * port,int mTag);
-	virtual ~SocketThread(void);
+	SocketThread(const char * hostname,const char * port,int mTag);
+	~SocketThread(void);
 
 	/**start thread*/
 	void startThread();
@@ -62,6 +61,7 @@ public:
 	//cmd action data
 	void addToSendBuffer(const char * mData,unsigned int mDataLength,int mHeadType);
 private:
+	SocketThread();
 	/**server operation ,return 0 if connect is ok,else -1*/
 	int connectServer();
 	/**handle error when socket has some exceptions*/

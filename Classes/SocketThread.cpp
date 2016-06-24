@@ -3,7 +3,7 @@
 #include <string.h>
 #include <errno.h>
 
-#include "NetServer.h"
+#include "NetService.h"
 
 #define SIZE 100
 /*
@@ -76,9 +76,9 @@ void SocketThread::startThread()
 {
 	isRunning = true;
 
-	_sendThread = thread(&SocketThread::sendThread);
+	_sendThread = thread(&SocketThread::sendThread, this);
 	_sendThread.detach();
-	_recvThread = thread(&SocketThread::recvThread);
+	_recvThread = thread(&SocketThread::recvThread, this);
 	_recvThread.detach();
 }
 
@@ -232,7 +232,6 @@ void SocketThread::sendThread()
 /////////////////////////////////////////// send start ///////////////////////////////////////////
 		if (sendList.size() > 0)
 		{
-			size_t ret_len; //返回长度
 			bool isSendOK = false;
 			int sendIndex = 0;
 			int _length = 0;
@@ -300,15 +299,13 @@ void SocketThread::sendThread()
 
 	if (isExitThread)
 	{
-		NetServer::getInstance()->removeSocket(tag);
+		NetService::getInstance()->removeSocket(tag);
 	}
 }
 
 void SocketThread::recvThread()
 {
-
 	//short comStatus = COM_CONNECTED;
-	int retCode;
 	while (isRunning)
 	{
 		if (!isConnect)
@@ -358,7 +355,7 @@ void SocketThread::recvThread()
 			continue; // continue for outer while loop /////
 		}
 		/////// receive header OK ////////////
-		int dataLength = ntohl(*((int *)headerBuffer));
+		unsigned int dataLength = ntohl(*((int *)headerBuffer));
 		if (dataLength>0)
 		{
 			memset(recvBuf, 0 , bufLength);
