@@ -1,0 +1,15 @@
+#change
+*.sdf
+*.tlog
+!*.pch
+*.dll
+!*.lib
+Debug/
+Release/
+
+Debug.win32/
+Release.win32/
+*.lastbuildstate
+
+#ios 
+UserInterfaceState.xcuserstate
