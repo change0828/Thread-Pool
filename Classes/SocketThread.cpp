@@ -1,10 +1,11 @@
 ﻿#include "SocketThread.h"
 
 #include <string.h>
-#include <assert.h>
+#include <errno.h>
 
 #include "NetServer.h"
 
+#define SIZE 100
 /*
  * 打印错误信息到错误缓冲区(ut_error_message)，私有函数
  */
@@ -39,7 +40,7 @@ SocketThread::~SocketThread(void)
 	}
 	sendList.clear();
 
-	for (int i=0; i<recyleList.size(); i++) {
+	for (size_t i=0; i<recyleList.size(); i++) {
 		CPackage * tmpArray = (CPackage *) recyleList.at(i);
 		if (tmpArray) {
 			delete tmpArray;
@@ -75,9 +76,9 @@ void SocketThread::startThread()
 {
 	isRunning = true;
 
-	_sendThread = thread(sendThread);
+	_sendThread = thread(&SocketThread::sendThread);
 	_sendThread.detach();
-	_recvThread = thread(recvThread);
+	_recvThread = thread(&SocketThread::recvThread);
 	_recvThread.detach();
 }
 
@@ -152,39 +153,50 @@ int SocketThread::connectServer()
 	int ret = getaddrinfo(host, port, &hint, &_addrinfo); 
 	if (SOCKET_OK!=ret) { 
 		/** 域名解析失败*/
+		char buf[SIZE];
+		strerror_s(buf, SIZE, errno);
 		on_error("域名解析失败 host %s, port %s errorcode：%s\n", \
-			host, port, strerror(errno));
+			host, port, buf);
 		return ret;
 	} 
 	
+	int _connect = 0;
 	for (curr = _addrinfo; curr != NULL; curr = curr->ai_next) { 
 		_socket = socket(curr->ai_family, curr->ai_socktype, curr->ai_protocol);
 		if (SOCKET_ERROR==_socket)
 		{
-			on_error("socket : 获取套接字失败，错误信息：%s\n", \
-				strerror(errno));
+			char buf[SIZE];
+			strerror_s(buf, SIZE, errno);
+			on_error("域名解析失败 host %s, port %s errorcode：%s\n", \
+				host, port, buf);
 			continue;
 		}
 	
-		isConnect = connect(_socket, curr->ai_addr, curr->ai_addrlen);
-		if (0!=isConnect)
+		_connect = connect(_socket, curr->ai_addr, curr->ai_addrlen);
+		if (0!= _connect)
 		{
-			on_error("socket connect error : 连接失败，错误信息：%s\n", \
-				strerror(errno));
+			char buf[SIZE];
+			strerror_s(buf, SIZE, errno);
+			on_error("域名解析失败 host %s, port %s errorcode：%s\n", \
+				host, port, buf);
 			continue;
 		}
+		isConnect = true;
 #ifdef COCOS2D_DEBUG
 		printf("socket is : %d", _socket);
 #endif
 		break;
 	}
 	
-	return isConnect;
+	return _connect;
 }
 
 void SocketThread::handleError()
 {
-	on_error("handleError tag=%d: 传输数据失败，错误信息:%s\n",tag,strerror(errno));
+	char buf[SIZE];
+	strerror_s(buf, SIZE, errno);
+	on_error("域名解析失败 host %s, port %s errorcode：%s\n", \
+		host, port, buf);
 
 	isRunning	= false;
 	isReceiveHeaderOK= false;
