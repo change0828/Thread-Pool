@@ -230,19 +230,19 @@ bool NetService::handleDelegates(CPackage *mCmd)
 		{
 			isCmdHandled = object->cmdHandle(mCmd);
 
-			if (isCmdHandled)
-			{
-				break;
-			}
+			//if (isCmdHandled)
+			//{
+			//	break;
+			//}
 		}
 		else if (mCmd->getStatus() == COM_ERROR)
 		{
 			isCmdHandled = object->notifyResponseState(mCmd);
 
-			if (isCmdHandled)
-			{
-				break;
-			}
+			//if (isCmdHandled)
+			//{
+			//	break;
+			//}
 		}
 	}
 
