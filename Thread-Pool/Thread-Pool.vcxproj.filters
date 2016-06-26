@@ -23,7 +23,7 @@
     <ClCompile Include="main.cpp">
       <Filter>Classes</Filter>
     </ClCompile>
-    <ClCompile Include="..\Classes\NetServer.cpp">
+    <ClCompile Include="..\Classes\NetService.cpp">
       <Filter>Classes</Filter>
     </ClCompile>
   </ItemGroup>
@@ -34,7 +34,7 @@
     <ClInclude Include="..\Classes\SocketThread.h">
       <Filter>Classes</Filter>
     </ClInclude>
-    <ClInclude Include="..\Classes\NetServer.h">
+    <ClInclude Include="..\Classes\NetService.h">
       <Filter>Classes</Filter>
     </ClInclude>
   </ItemGroup>

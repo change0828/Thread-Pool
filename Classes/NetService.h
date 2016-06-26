@@ -6,6 +6,7 @@
 #define __NetService_H__
 
 #include "Package.h"
+#include "SocketThread.h"
 #include <vector>
 
 //communication type for http,tcp,and http downloading
@@ -40,7 +41,7 @@ public:
 	/**set denied to receive message from NetService dispatcher*/
 	void setBlockCmd();
 	/**get is receiving or not*/
-	bool getReceiveCmd();
+	bool getReceiveCmd() { return isReceiveCmd; }
 
 	/**add to NetService dispatcher*/
 	virtual void IntoDealNetCommand(void);
@@ -65,6 +66,17 @@ public:
 	static NetService* getInstance();
 	static void purge();
 
+	/**main Thread*/
+	void handleThread();
+	/**handle delegates in function(handleThread)*/
+	bool handleDelegates(CPackage *mCmd);
+
+	/**remove all delegates*/
+	void removeAllDelegates(void);
+	/**add delegate*/
+	void addDelegate(CmdHandleDelegate* mDelegate);
+	/**remove delegate*/
+	void removeDelegate(CmdHandleDelegate * mDelegate);
 
 	/**clear all socket handle*/
 	void clearSockets();
@@ -79,7 +91,16 @@ public:
 
 	//cmd
 public:
-	void sendData(CPackage *mData);
+	/**push cmd from socket received*/
+	void pushCmd(const char * mData, int mDataLength, int mCmdType, int mActionType, int mTag, char mStatus);
+	/**send cmd to socket*/
+	void sendCmd(CPackage * mCmd);
+	/**pop command from command vector*/
+	CPackage * popCmd();
+	/**get command size*/
+	int cmdVectorSize();
+	/**clear message vector*/
+	void clearCmdVector();
 
 private:
 	NetService(void);
@@ -90,7 +111,19 @@ private:
 private:
 	static NetService *_instance;
 
+	//handle loop is running or not,default is true
+	bool running;
+	//mutex used for thread synchronization
+	mutex _mutex;
 
+	//all delegate array
+	vector<CmdHandleDelegate*> delegateArray;
+	//socket array
 	std::vector<SocketThread*> sokcetArray;
+
+	//command already receive from server
+	vector<CPackage*> cmdVector;
+	//recyle ByteArray used
+	vector<CPackage*> recyleBuffer;
 };
 #endif

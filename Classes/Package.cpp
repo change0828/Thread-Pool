@@ -138,6 +138,16 @@ bool CPackage::readFinish()
 	return false;
 }
 
+void CPackage::setStatus(char mStatus)
+{
+	status = mStatus;
+}
+
+char CPackage::getStatus()
+{
+	return  status;
+}
+
 void CPackage::reuse()
 {
 	m_nRdptr = 0;

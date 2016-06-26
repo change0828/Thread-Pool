@@ -66,6 +66,11 @@ public:
 	/** 是否读取到包尾部*/
 	bool readFinish();
 
+	/**set status*/
+	void setStatus(char mStatus);
+	/**get status*/
+	char getStatus();
+
 	/**resize buffer*/
 	void resize(unsigned int mLength);
 	/**reset rd_ptr and wr_ptr to 0*/
@@ -88,5 +93,7 @@ private:
 	type_word  m_sBuffSize;
 	/** socket tag */
 	int			_tag;
+	//command status
+	char status;
 };
 #endif

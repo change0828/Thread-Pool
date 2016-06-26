@@ -172,7 +172,7 @@ int SocketThread::connectServer()
 			continue;
 		}
 	
-		_connect = connect(_socket, curr->ai_addr, curr->ai_addrlen);
+		_connect = connect(_socket, curr->ai_addr, (int)curr->ai_addrlen);
 		if (0!= _connect)
 		{
 			char buf[SIZE];
