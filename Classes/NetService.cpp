@@ -51,12 +51,13 @@ NetService* NetService::getInstance()
 	if (nullptr==_instance)
 	{
 		_instance = new NetService();
-
+		_instance->startThread();
 		for (short i = 0; i < 10; i++)
 		{
 			CPackage * tmpCmd = new CPackage(512);
 			_instance->recyleBuffer.push_back(tmpCmd);
 		}
+
 	}
 	return _instance;
 }
@@ -71,12 +72,44 @@ void NetService::purge()
 }
 
 NetService::NetService(void)
+	:isRunning(false)
 {
+#ifdef WIN32
+	WSADATA wsaData;
+	WSAStartup(MAKEWORD(2, 0), &wsaData);
+#endif
 }
 
 NetService::~NetService(void)
 {
-	//_cleanNet();
+	isRunning = false;
+	this->clearSockets();
+	this->clearCmdVector();
+	this->removeAllDelegates();
+}
+
+void NetService::startThread()
+{
+	isRunning = true;
+	_handleThread = thread(&NetService::handleThread, this);
+	_handleThread.detach();
+}
+
+void NetService::stopThread()
+{
+	std::unique_lock<std::mutex> _lock(_instance->_mutex);
+
+	isRunning = false;
+
+	vector<SocketThread*>::iterator itr = sokcetArray.begin();
+	for (; itr != sokcetArray.end(); itr++)
+	{
+		SocketThread *_SocketT = *itr;
+		if (nullptr != _SocketT)
+		{
+			_SocketT->stopThread();
+		}
+	}
 }
 
 void NetService::addDelegate(CmdHandleDelegate* mDelegate)
@@ -135,6 +168,7 @@ void NetService::newSocket(const char *hostname, const char* port, int mTag)
 
 SocketThread* NetService::getSocketByTag(int mTag)
 {
+	std::unique_lock<std::mutex> _lock(_mutex);
 	vector<SocketThread*>::iterator itr = sokcetArray.begin();
 	for (; itr != sokcetArray.end(); itr++)
 	{
@@ -179,6 +213,8 @@ void NetService::removeSocket(int mTag)
 
 void NetService::clearSockets()
 {
+	std::unique_lock<std::mutex> _lock(_instance->_mutex);
+
 	vector<SocketThread*>::iterator itr = sokcetArray.begin();
 	for (; itr != sokcetArray.end(); itr++)
 	{
@@ -197,7 +233,7 @@ void NetService::clearSockets()
 
 void NetService::handleThread()
 {
-	while (running)
+	while (isRunning)
 	{
 		// 处理第一条指令.
 		CPackage *readCmd = NULL;
@@ -205,8 +241,8 @@ void NetService::handleThread()
 		if (readCmd != NULL)
 		{
 			bool isCmdHandled = this->handleDelegates(readCmd);
+			std::unique_lock<std::mutex> _lock(_mutex);
 			if (isCmdHandled == false) {
-				std::unique_lock<std::mutex> _lock(_mutex);
 				cmdVector.insert(cmdVector.begin(), readCmd);
 			}
 			else {
@@ -294,6 +330,11 @@ void NetService::pushCmd(const char * mData, int mDataLength, int mCmdType, int 
 
 void NetService::sendCmd(CPackage * mCmd)
 {
+	if (!isRunning)
+	{
+		return;
+	}
+
 	int _tag = mCmd->getTag();
 
 	SocketThread *_socket = this->getSocketByTag(_tag);

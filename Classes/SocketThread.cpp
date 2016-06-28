@@ -23,37 +23,10 @@ static int on_error(const char *format, ...)
 	return bytes_written;
 }
 
-SocketThread::~SocketThread(void)
-{
-	//clearup buffer
-	if (recvBuf != NULL) {
-		delete[] recvBuf;
-		recvBuf = NULL;
-	}
-
-	for (size_t i=0; i<sendList.size(); i++) {
-		CPackage * tmpArray = (CPackage *) sendList.at(i);
-		if (tmpArray) {
-			delete tmpArray;
-			tmpArray = NULL;
-		}
-	}
-	sendList.clear();
-
-	for (size_t i=0; i<recyleList.size(); i++) {
-		CPackage * tmpArray = (CPackage *) recyleList.at(i);
-		if (tmpArray) {
-			delete tmpArray;
-			tmpArray = NULL;
-		}
-	}
-	recyleList.clear();
-
-	isRunning		= false;
-}
-
 SocketThread::SocketThread(const char * mHost,const char * mPort,int mTag)
 	:tag(mTag)
+	, isSendOver(false)
+	, isRecvOver(false)
 {
 	recvBuf = new char[MAXMSGSIZE];
 	memset(recvBuf, 0, MAXMSGSIZE);
@@ -71,6 +44,35 @@ SocketThread::SocketThread(const char * mHost,const char * mPort,int mTag)
 	_socket=INVALID_SOCKET;
 }
 
+SocketThread::~SocketThread(void)
+{
+	std::unique_lock<std::mutex> _lock(_mutex);
+	//clearup buffer
+	if (recvBuf != NULL) {
+		delete[] recvBuf;
+		recvBuf = NULL;
+	}
+
+	for (size_t i = 0; i < sendList.size(); i++) {
+		CPackage * tmpArray = (CPackage *)sendList.at(i);
+		if (tmpArray) {
+			delete tmpArray;
+			tmpArray = NULL;
+		}
+	}
+	sendList.clear();
+
+	for (size_t i = 0; i < recyleList.size(); i++) {
+		CPackage * tmpArray = (CPackage *)recyleList.at(i);
+		if (tmpArray) {
+			delete tmpArray;
+			tmpArray = NULL;
+		}
+	}
+	recyleList.clear();
+
+	isRunning = false;
+}
 
 void SocketThread::startThread()
 {
@@ -84,9 +86,11 @@ void SocketThread::startThread()
 
 void SocketThread::stopThread()
 {
+	std::unique_lock<std::mutex> _lock(_mutex);
 	isRunning = false;
-	isReceiveHeaderOK= false;
+	isReceiveHeaderOK = false;
 	isReceiveOK = false;
+	isConnect = false;
 
 	//默认情况下，close()/closesocket() 会立即向网络中发送FIN包，不管输出缓冲区中是否还有数据，而shutdown() 会等输出缓冲区中的数据传输完毕再发送FIN包。
 	//也就意味着，调用 close()/closesocket() 将丢失输出缓冲区中的数据，而调用 shutdown() 不会。
@@ -113,25 +117,38 @@ int SocketThread::getTag()
 void SocketThread::addToSendBuffer(const char * mData,unsigned int mDataLength,int mHeadType)
 {
 	CPackage *_readBuffer = nullptr;
+
+	std::unique_lock<std::mutex> _lock(_mutex);
+
+	if (isSendOver || isRecvOver)
+	{
+		return;
+	}
+
 	if (!recyleList.empty())
 	{
+		if (recyleList.size() > 10)
+		{
+			int a1 = 0;
+		}
+		//printf("\n before -- recyleList size is %d ", recyleList.size());
 		_readBuffer = (CPackage*)(recyleList.front());
 		_readBuffer->reuse();//must set to reuse.
-		recyleList.erase(recyleList.begin());;
+		recyleList.erase(recyleList.begin());
+		//printf("\n -- erase recyleList size is %d ", recyleList.size());
+
 	}
 	else
 	{
 		_readBuffer = new CPackage(mDataLength + AUGMENT_SIZE_LEN);
 	}
-	_readBuffer->pushHead(mHeadType);
 	_readBuffer->pushDword(mDataLength);
 	_readBuffer->copy(mData, mDataLength);
 
-	std::unique_lock<std::mutex> _lock(_mutex);
 	sendList.push_back(_readBuffer);
+	_lock.unlock();
 
 	waitNotify.notify_all();
-	_lock.unlock();
 }
 
 int SocketThread::connectServer()
@@ -275,15 +292,16 @@ void SocketThread::sendThread()
 			if (isSendOK)
 			{
 #ifdef COCOS2D_DEBUG
-				printf("Account send head = %d", (int)_data->getHead());
+				printf("\nsend head = %d", (int)_data->getHead());
 #endif
 				std::unique_lock<std::mutex> _lock(_mutex);
 				if (!sendList.empty())
 				{
 					sendList.erase(sendList.begin());
 				}
+				//printf("\n before ++ recyleList size is %d ", recyleList.size());
 				recyleList.push_back(_data);
-				_lock.unlock();
+				//printf("\n ++ recyleList size is %d ", recyleList.size());
 			}
 			else
 			{
@@ -296,7 +314,7 @@ void SocketThread::sendThread()
 		}
 /////////////////////////////////////////// send end OK //////////////////////////////////////////
 	}
-
+	isSendOver = true;
 	if (isExitThread)
 	{
 		NetService::getInstance()->removeSocket(tag);
@@ -403,7 +421,7 @@ void SocketThread::recvThread()
 			}
 			if (isReceiveOK)
 			{
-
+				NetService::getInstance()->pushCmd(recvBuf, receivePackageIndex, 0, ntohs(*(type_word*)(recvBuf)), 0, COM_OK);
 			}
 			else
 			{
@@ -417,4 +435,5 @@ void SocketThread::recvThread()
 
 /////////////////////////////////////// receive header ok //////////////////////////////////////////
 	}
+	isRecvOver = true;
 }

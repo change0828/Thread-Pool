@@ -66,6 +66,11 @@ public:
 	static NetService* getInstance();
 	static void purge();
 
+	/**start thread*/
+	void startThread();
+	/**stop thread*/
+	void stopThread();
+
 	/**main Thread*/
 	void handleThread();
 	/**handle delegates in function(handleThread)*/
@@ -112,9 +117,11 @@ private:
 	static NetService *_instance;
 
 	//handle loop is running or not,default is true
-	bool running;
+	bool isRunning;
 	//mutex used for thread synchronization
 	mutex _mutex;
+	//thread handle
+	thread _handleThread;
 
 	//all delegate array
 	vector<CmdHandleDelegate*> delegateArray;

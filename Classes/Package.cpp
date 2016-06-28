@@ -13,6 +13,7 @@ CPackage::CPackage(type_word size)
 	,m_siHead(0)
 	,m_nRdptr(0)
 	,m_nWrPtr(0)
+	, _tag(0)
 {
 	m_pBuff = new char[m_siSize];
 	memset(m_pBuff, 0, sizeof(m_pBuff));
@@ -184,21 +185,3 @@ int CPackage::copy(const char *buf, int n)
 
 	return 0;
 }
-
-//void CPackage::restructuring()
-//{
-//	int _size = sizeof(m_pBuff);
-//	char* _buff = new char[m_siSize];
-//	memset(_buff, 0, sizeof(_buff));
-//	memcpy(_buff,m_pBuff,m_siSize);	
-//	delete[] m_pBuff;
-//
-//	int _len = m_siOffset;
-//	this->setOffset();
-//	m_pBuff = new char[m_siSize + DWORD_SIZE];
-//	memset(m_pBuff, 0, sizeof(m_pBuff));	
-//	this->pushDword(_len);
-//	memcpy((void*)(buff()+m_siOffset), _buff, _len);
-//	m_siOffset += _len;
-//	delete[] _buff;
-//}

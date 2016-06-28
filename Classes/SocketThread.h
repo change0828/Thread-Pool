@@ -104,5 +104,7 @@ private:
 	thread _sendThread;
 	thread _recvThread;
 
+	bool isSendOver;
+	bool isRecvOver;
 };
 
