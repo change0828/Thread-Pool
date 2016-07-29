@@ -6,7 +6,6 @@
 
 #ifndef __PACKAGE_H__
 #define __PACKAGE_H__
-//#include "net_protocol.h"
 
 typedef unsigned char	type_byte;
 typedef unsigned short	type_word;

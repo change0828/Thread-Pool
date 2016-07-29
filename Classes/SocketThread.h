@@ -57,6 +57,8 @@ public:
 	bool getIsConnected();
 	/**get socket tag*/
 	int getTag();
+	/**is thread over*/
+	bool isThreadOver();
 
 	//cmd action data
 	void addToSendBuffer(const char * mData,unsigned int mDataLength,int mHeadType);
@@ -72,6 +74,7 @@ private:
 private:
 	//receive buffer,default size is MAXMSGSIZE
 	char * recvBuf;
+	char	_ipaddr[128];
 	//buffer length
 	unsigned int bufLength;
 
@@ -90,10 +93,14 @@ private:
 	//receive message ok or not
 	bool isReceiveOK;
 
+	//close socket by user.
+	bool closeSocketByUser; 
 	//send buffer
 	vector<CPackage*> sendList;
 	//recyle CPackage sended
 	vector<CPackage*> recyleList;
+	//message item
+	CPackage * receiveItem;
 
 	SOCKET _socket;
 	//mutex used for thread synchronization

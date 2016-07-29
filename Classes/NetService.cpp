@@ -3,6 +3,8 @@
 
 #include <string.h>
 
+#include "cocos2d.h"
+
 using namespace std;
 
 CmdHandleDelegate::CmdHandleDelegate()
@@ -51,7 +53,7 @@ NetService* NetService::getInstance()
 	if (nullptr==_instance)
 	{
 		_instance = new NetService();
-		_instance->startThread();
+		_instance->isRunning = true;
 		for (short i = 0; i < 10; i++)
 		{
 			CPackage * tmpCmd = new CPackage(512);
@@ -71,6 +73,12 @@ void NetService::purge()
 	}
 }
 
+void NetService::clear()
+{
+	this->clearSockets();
+	this->clearCmdVector();
+}
+
 NetService::NetService(void)
 	:isRunning(false)
 {
@@ -88,17 +96,8 @@ NetService::~NetService(void)
 	this->removeAllDelegates();
 }
 
-void NetService::startThread()
-{
-	isRunning = true;
-	_handleThread = thread(&NetService::handleThread, this);
-	_handleThread.detach();
-}
-
 void NetService::stopThread()
 {
-	std::unique_lock<std::mutex> _lock(_instance->_mutex);
-
 	isRunning = false;
 
 	vector<SocketThread*>::iterator itr = sokcetArray.begin();
@@ -114,21 +113,14 @@ void NetService::stopThread()
 
 void NetService::addDelegate(CmdHandleDelegate* mDelegate)
 {
-	std::unique_lock<std::mutex> _lock(_mutex);
-
 	mDelegate->setReceiveCmd();
 	delegateArray.push_back(mDelegate);
-#ifdef COCOS2D_DEBUG
-	printf("+++++ add to operateArray delegate =%p name=%s \n", (mDelegate), typeid(*mDelegate).name());
-#endif
+	CCLOG("+++++ add to operateArray delegate =%p name=%s \n", (mDelegate), typeid(*mDelegate).name());
 }
 
 void NetService::removeDelegate(CmdHandleDelegate * mDelegate)
 {
-	std::unique_lock<std::mutex> _lock(_mutex);
-
 	mDelegate->setBlockCmd();
-
 
 	vector<CmdHandleDelegate*>::iterator itr = delegateArray.begin();
 	for (; itr != delegateArray.end();)
@@ -142,14 +134,11 @@ void NetService::removeDelegate(CmdHandleDelegate * mDelegate)
 			itr++;
 		}
 	}
-#ifdef COCOS2D_DEBUG
-	printf("---- remove to removedArray delegate =%p name=%s \n", (mDelegate), typeid(*mDelegate).name());
-#endif
+	CCLOG("---- remove to removedArray delegate =%p name=%s \n", (mDelegate), typeid(*mDelegate).name());
 }
 
 void NetService::removeAllDelegates(void)
 {
-	std::unique_lock<std::mutex> _lock(_mutex);
 	if (delegateArray.size() > 0)
 		delegateArray.clear();
 }
@@ -190,6 +179,7 @@ void NetService::addSocket(SocketThread * mSocket,int mTag)
 
 void NetService::removeSocket(int mTag)
 {
+	std::unique_lock<std::mutex> _lock(_mutex);
 	vector<SocketThread*>::iterator itr = sokcetArray.begin();
 	for (; itr != sokcetArray.end(); itr++)
 	{
@@ -198,14 +188,12 @@ void NetService::removeSocket(int mTag)
 		{
 			_SocketT->stopThread();
 
-			delete _SocketT;
-			_SocketT = nullptr;
-
+			//delete _SocketT;
+			//_SocketT = nullptr;
+			removeArray.push_back(_SocketT);
 			sokcetArray.erase(itr);
 
-#ifdef COCOS2D_DEBUG
-			printf("socket tag=%d remove from NetService\n",mTag);
-#endif
+			CCLOG("socket tag=%d remove from NetService\n",mTag);
 			break;
 		}
 	}
@@ -213,41 +201,62 @@ void NetService::removeSocket(int mTag)
 
 void NetService::clearSockets()
 {
-	std::unique_lock<std::mutex> _lock(_instance->_mutex);
-
 	vector<SocketThread*>::iterator itr = sokcetArray.begin();
-	for (; itr != sokcetArray.end(); itr++)
+	for (; itr != sokcetArray.end();)
 	{
 		SocketThread *_SocketT = *itr;
 		if (nullptr!=_SocketT)
 		{
 			_SocketT->stopThread();
 
-			delete _SocketT;
-			_SocketT = nullptr;
+			removeArray.push_back(_SocketT);
 		}
+		itr = sokcetArray.erase(itr);
 	}
 
 	sokcetArray.clear();
 }
 
-void NetService::handleThread()
+void NetService::handleLoop(float mTime)
 {
-	while (isRunning)
+	if (!isRunning)
 	{
-		// 处理第一条指令.
-		CPackage *readCmd = NULL;
-		readCmd = this->popCmd();
-		if (readCmd != NULL)
-		{
-			bool isCmdHandled = this->handleDelegates(readCmd);
+		return;
+	}
+	//处理移除
+	this->handleRemoveArray();
+	// 处理第一条指令.
+	CPackage *readCmd = NULL;
+	readCmd = this->popCmd();
+	if (readCmd != NULL)
+	{
+		bool isCmdHandled = this->handleDelegates(readCmd);
+		if (isCmdHandled == false) {
 			std::unique_lock<std::mutex> _lock(_mutex);
-			if (isCmdHandled == false) {
-				cmdVector.insert(cmdVector.begin(), readCmd);
-			}
-			else {
-				recyleBuffer.push_back(readCmd);
-			}
+			cmdVector.insert(cmdVector.begin(), readCmd);
+		}
+		else {
+			recyleBuffer.push_back(readCmd);
+		}
+	}
+}
+
+void NetService::handleRemoveArray()
+{
+	vector<SocketThread*>::iterator itr = removeArray.begin();
+	for (; itr != removeArray.end();)
+	{
+		SocketThread *_SocketT = *itr;
+		if (nullptr!=_SocketT && _SocketT->isThreadOver())
+		{
+			itr = removeArray.erase(itr);
+
+			delete _SocketT;
+			_SocketT = nullptr;
+		}
+		else 
+		{
+			itr++;
 		}
 	}
 }
@@ -256,29 +265,49 @@ bool NetService::handleDelegates(CPackage *mCmd)
 {
 	bool isCmdHandled = false;
 
-	std::unique_lock<std::mutex> _lock(_mutex);
 	vector<CmdHandleDelegate*>::iterator itr = delegateArray.begin();
 	for (; itr != delegateArray.end(); itr++)
 	{
 		CmdHandleDelegate * object = (*itr);
 
-		if (mCmd->getStatus() == COM_OK)
+		if (mCmd->getHead() == COM_TCP)
 		{
-			isCmdHandled = object->cmdHandle(mCmd);
-
-			//if (isCmdHandled)
+			if (mCmd->getStatus() == COM_CONNECT_FAILED)
+			{
+				this->removeSocket(mCmd->getTag());
+			}
+			//if (mCmd->getStatus() == COM_SYS_ERROR)
 			//{
-			//	break;
+			//	this->removeSocket(mCmd->getTag());
 			//}
-		}
-		else if (mCmd->getStatus() == COM_ERROR)
-		{
+
 			isCmdHandled = object->notifyResponseState(mCmd);
 
-			//if (isCmdHandled)
-			//{
-			//	break;
-			//}
+			if (isCmdHandled)
+			{
+				break;
+			}
+		}
+		else
+		{
+			if (mCmd->getStatus() == COM_OK)
+			{
+				isCmdHandled = object->cmdHandle(mCmd);
+
+				if (isCmdHandled)
+				{
+					break;
+				}
+			}
+			else if (mCmd->getStatus() == COM_ERROR)
+			{
+				isCmdHandled = object->notifyResponseState(mCmd);
+
+				if (isCmdHandled)
+				{
+					break;
+				}
+			}
 		}
 	}
 
@@ -298,9 +327,7 @@ void NetService::pushCmd(const char * mData, int mDataLength, int mCmdType, int 
 				readedCmd = (CPackage *)(recyleBuffer.front());
 				readedCmd->reuse();//must set to reuse.
 				recyleBuffer.erase(recyleBuffer.begin());
-#ifdef COCOS2D_DEBUG
-				printf("reuse message =%p \n", readedCmd);
-#endif
+				CCLOG("reuse message =%p \n", readedCmd);
 			}
 			else
 			{
@@ -312,17 +339,15 @@ void NetService::pushCmd(const char * mData, int mDataLength, int mCmdType, int 
 				readedCmd->pushHead(mActionType);
 				readedCmd->setTag(mTag);
 				readedCmd->setStatus(mStatus); // cmd status. 1 = success, 0 = false
-				readedCmd->copy(mData, mDataLength);
+				readedCmd->copy(mData+2, mDataLength-2);	//扣除head 长度
 				cmdVector.push_back(readedCmd);
-#ifdef COCOS2D_DEBUG
-				printf("ActionID =%d type=%d,status =%d,data length=%d \n", mCmdType, mActionType, mStatus, mDataLength);
-#endif
+				CCLOG("ActionID =%d type=%d,status =%d,data length=%d \n", mCmdType, mActionType, mStatus, mDataLength);
 			}
 			else if (mActionType == 0)
 			{
-#ifdef COCOS2D_DEBUG
-				printf("heart beat ActionID =%d ,data length=%d \n", mCmdType, mDataLength);
-#endif
+                delete readedCmd;
+                readedCmd = nullptr;
+				CCLOG("heart beat ActionID =%d ,data length=%d \n", mCmdType, mDataLength);
 			}
 		}
 	}
@@ -338,23 +363,21 @@ void NetService::sendCmd(CPackage * mCmd)
 	int _tag = mCmd->getTag();
 
 	SocketThread *_socket = this->getSocketByTag(_tag);
-	if (nullptr != _socket && _socket->getIsConnected())
+	if (nullptr != _socket && _socket->getIsRunning())
 	{
 		_socket->addToSendBuffer(mCmd->buff(), mCmd->length(), mCmd->getHead());
 	}
 	else
 	{
-#ifdef COCOS2D_DEBUG
-		printf("send command failed ,no valid socket item or not connect \n");
-#endif
-}
+		CCLOG("send command failed ,no valid socket item or not connect \n");
+	}
 }
 
 CPackage * NetService::popCmd()
 {
-	std::unique_lock<std::mutex> _lock(_mutex);
-
 	CPackage * mCmd = NULL;
+
+	std::unique_lock<std::mutex> _lock(_mutex);
 	if (cmdVector.empty() == false)
 	{
 		mCmd = (CPackage *)(cmdVector.front());

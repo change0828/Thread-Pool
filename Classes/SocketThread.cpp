@@ -2,8 +2,8 @@
 
 #include <string.h>
 #include <errno.h>
-
 #include "NetService.h"
+#include "cocos2d.h"
 
 #define SIZE 100
 /*
@@ -25,32 +25,39 @@ static int on_error(const char *format, ...)
 
 SocketThread::SocketThread(const char * mHost,const char * mPort,int mTag)
 	:tag(mTag)
+    , bufLength(MAXMSGSIZE)
+    , isRunning(false)
+    , isConnect(false)
+    , isReceiveHeaderOK(false)
+    , isReceiveOK(false)
+	, closeSocketByUser(false)
 	, isSendOver(false)
 	, isRecvOver(false)
+    , _socket(INVALID_SOCKET)
 {
-	recvBuf = new char[MAXMSGSIZE];
-	memset(recvBuf, 0, MAXMSGSIZE);
-	bufLength = MAXMSGSIZE;
+	recvBuf = new char[bufLength];
+	memset(recvBuf, 0, bufLength);
 
-	isRunning	= false;
-	isConnect	= false;
+	receiveItem = new CPackage(256);
 	//handl host info
 	memset(host, 0, 128);
 	memcpy(host, mHost, strlen(mHost));
 	//handl port info
 	memset(port, 0, 16);
 	memcpy(port, mPort, strlen(mPort));
-
-	_socket=INVALID_SOCKET;
 }
 
 SocketThread::~SocketThread(void)
 {
-	std::unique_lock<std::mutex> _lock(_mutex);
 	//clearup buffer
 	if (recvBuf != NULL) {
 		delete[] recvBuf;
 		recvBuf = NULL;
+	}
+	//delete receive item
+	if (receiveItem) {
+		delete receiveItem;
+		receiveItem = NULL;
 	}
 
 	for (size_t i = 0; i < sendList.size(); i++) {
@@ -78,6 +85,7 @@ void SocketThread::startThread()
 {
 	isRunning = true;
 
+	this->connectServer();
 	_sendThread = thread(&SocketThread::sendThread, this);
 	_sendThread.detach();
 	_recvThread = thread(&SocketThread::recvThread, this);
@@ -86,17 +94,22 @@ void SocketThread::startThread()
 
 void SocketThread::stopThread()
 {
-	std::unique_lock<std::mutex> _lock(_mutex);
+	//std::unique_lock<std::mutex> _lock(_mutex);
+	closeSocketByUser = true;
 	isRunning = false;
 	isReceiveHeaderOK = false;
 	isReceiveOK = false;
 	isConnect = false;
+
+	//发送线程可能等待通知
+	waitNotify.notify_all();
 
 	//默认情况下，close()/closesocket() 会立即向网络中发送FIN包，不管输出缓冲区中是否还有数据，而shutdown() 会等输出缓冲区中的数据传输完毕再发送FIN包。
 	//也就意味着，调用 close()/closesocket() 将丢失输出缓冲区中的数据，而调用 shutdown() 不会。
 	//shutdown(_socket, SHUT_RDWR);
 
 	closesocket(_socket);
+	_socket=SOCKET_ERROR;
 }
 
 bool SocketThread::getIsRunning()
@@ -114,6 +127,11 @@ int SocketThread::getTag()
 	return tag;
 };
 
+bool SocketThread::isThreadOver()
+{
+	return (isSendOver & isRecvOver);
+}
+
 void SocketThread::addToSendBuffer(const char * mData,unsigned int mDataLength,int mHeadType)
 {
 	CPackage *_readBuffer = nullptr;
@@ -127,10 +145,6 @@ void SocketThread::addToSendBuffer(const char * mData,unsigned int mDataLength,i
 
 	if (!recyleList.empty())
 	{
-		if (recyleList.size() > 10)
-		{
-			int a1 = 0;
-		}
 		//printf("\n before -- recyleList size is %d ", recyleList.size());
 		_readBuffer = (CPackage*)(recyleList.front());
 		_readBuffer->reuse();//must set to reuse.
@@ -142,7 +156,9 @@ void SocketThread::addToSendBuffer(const char * mData,unsigned int mDataLength,i
 	{
 		_readBuffer = new CPackage(mDataLength + AUGMENT_SIZE_LEN);
 	}
-	_readBuffer->pushDword(mDataLength);
+	_readBuffer->pushHead(mHeadType);
+	_readBuffer->pushDword(mDataLength+WORD_SIZE);
+	_readBuffer->pushWord(mHeadType);
 	_readBuffer->copy(mData, mDataLength);
 
 	sendList.push_back(_readBuffer);
@@ -153,6 +169,11 @@ void SocketThread::addToSendBuffer(const char * mData,unsigned int mDataLength,i
 
 int SocketThread::connectServer()
 {
+	std::unique_lock<std::mutex> _lock(_mutex);
+	if (isConnect)
+	{
+		return 0;
+	}
 	if (INVALID_SOCKET!=_socket)
 	{
 		closesocket(_socket);
@@ -165,64 +186,84 @@ int SocketThread::connectServer()
 	hint.ai_flags = AI_CANONNAME;	//获取域名
 	hint.ai_family = AF_UNSPEC;		//
 	hint.ai_socktype = SOCK_STREAM; //数据流
-
-
+	CCLOG("域名解析 host %s, port %s\n",host,port);
 	int ret = getaddrinfo(host, port, &hint, &_addrinfo); 
 	if (SOCKET_OK!=ret) { 
 		/** 域名解析失败*/
-		char buf[SIZE];
-		strerror_s(buf, SIZE, errno);
-		on_error("域名解析失败 host %s, port %s errorcode：%s\n", \
-			host, port, buf);
+		CCLOG("域名解析失败 host %s, port %s\n", \
+			host, port);
 		return ret;
 	} 
-	
 	int _connect = 0;
+	struct sockaddr_in  *sockaddr_ipv4 = nullptr; 
+	struct sockaddr_in6 *sockaddr_ipv6 = nullptr; 
 	for (curr = _addrinfo; curr != NULL; curr = curr->ai_next) { 
 		_socket = socket(curr->ai_family, curr->ai_socktype, curr->ai_protocol);
 		if (SOCKET_ERROR==_socket)
 		{
-			char buf[SIZE];
-			strerror_s(buf, SIZE, errno);
-			on_error("域名解析失败 host %s, port %s errorcode：%s\n", \
-				host, port, buf);
+			CCLOG("创建套接字失败 host %s, port %s errorcode：%d\n", \
+				host, port, _socket);
 			continue;
 		}
-	
+
+		CCLOG("socket is : %d", _socket);
 		_connect = connect(_socket, curr->ai_addr, (int)curr->ai_addrlen);
 		if (0!= _connect)
 		{
-			char buf[SIZE];
-			strerror_s(buf, SIZE, errno);
-			on_error("域名解析失败 host %s, port %s errorcode：%s\n", \
-				host, port, buf);
+			CCLOG("连接失败 host %s, port %s errorcode：%d\n", \
+				host, port, _connect);
 			continue;
 		}
 		isConnect = true;
-#ifdef COCOS2D_DEBUG
-		printf("socket is : %d", _socket);
+		CCLOG("连接成功");
+		//IP 地址
+		if (AF_UNSPEC == curr->ai_family)
+		{
+		} 
+		else if (AF_INET == curr->ai_family)
+		{
+			sockaddr_ipv4 = reinterpret_cast<struct sockaddr_in *>( curr->ai_addr); 
+#if CC_PLATFORM_WP8!=CC_TARGET_PLATFORM
+			inet_ntop(curr->ai_family, &sockaddr_ipv4->sin_addr, _ipaddr, sizeof(_ipaddr));
+#else
+			inet_ntoa((in_addr)sockaddr_ipv4->sin_addr);
 #endif
+		}
+		else if (AF_INET6 == curr->ai_family)
+		{
+			sockaddr_ipv6 = reinterpret_cast<struct sockaddr_in6 *>( curr->ai_addr); 
+#if CC_PLATFORM_WP8!=CC_TARGET_PLATFORM
+			inet_ntop(curr->ai_family, &sockaddr_ipv6->sin6_addr, _ipaddr, sizeof(_ipaddr));
+#endif
+		}
+		CCLOG("analysis IP：%s\n",_ipaddr);
 		break;
-	}
+    }
+    freeaddrinfo(_addrinfo);
+	CCLOG("connectServer host %s port %s", host, port);
 	
 	return _connect;
 }
 
 void SocketThread::handleError()
 {
-	char buf[SIZE];
-	strerror_s(buf, SIZE, errno);
-	on_error("域名解析失败 host %s, port %s errorcode：%s\n", \
-		host, port, buf);
-
+	std::unique_lock<std::mutex> _lock(_mutex);
+	if (!closeSocketByUser)
+	{
+		receiveItem->reuse();
+		receiveItem->setTag(tag);
+		receiveItem->pushHead(COM_TCP);
+		receiveItem->pushWord(COM_TCP);
+		NetService::getInstance()->pushCmd(receiveItem->buff(),receiveItem->length(),COM_TCP,COM_TCP,tag,COM_SYS_ERROR);
+	}
+	closeSocketByUser	= true;
 	isRunning	= false;
-	isReceiveHeaderOK= false;
+	isReceiveHeaderOK	= false;
 	isReceiveOK = false;
 }
 
 void SocketThread::sendThread()
 {
-
 	bool isExitThread = false;
 	short comStatus = COM_CONNECTED;
 	int retCode;
@@ -239,10 +280,19 @@ void SocketThread::sendThread()
 			if (comStatus == COM_CONNECT_FAILED)
 			{
 				isExitThread = true;
-			}
-			///////send error info message //////////
-			//break to exit thread
-			if (isExitThread) {
+
+				///////send error info message //////////
+				receiveItem->reuse();//must set to reuse.
+
+				receiveItem->setTag(tag);
+				receiveItem->pushHead(COM_TCP);
+
+				receiveItem->pushDword(retCode);
+				receiveItem->pushByte(host,128);
+				receiveItem->pushByte(port,16);
+				receiveItem->pushWord(tag);
+				NetService::getInstance()->pushCmd(receiveItem->buff(),receiveItem->length(),COM_TCP,COM_TCP,tag,comStatus);
+
 				break;// exit thread
 			}
 		}
@@ -265,6 +315,9 @@ void SocketThread::sendThread()
 				
 				if (SOCKET_ERROR==_length)
 				{
+					CCLOG("发送失败 tag %d, head %d errorcode：%d\n", \
+						tag, _data->getHead(), _length);
+
 					this->handleError();
 					break;
 				}
@@ -272,16 +325,12 @@ void SocketThread::sendThread()
 				sendIndex += _length;
 				if (sendIndex > _data->length())
 				{
-#ifdef COCOS2D_DEBUG
-					printf("send data error  _length > data->length()");
-#endif
+					CCLOG("send data error  _length > data->length()");
 					break;
 				}
 				else if (sendIndex < _data->length())
 				{
-#ifdef COCOS2D_DEBUG
-					printf("raw_send tag=%d: 数据未发送完成,剩余:%ld\n",tag,(_data->length() - sendIndex));
-#endif
+					CCLOG("raw_send tag=%d: 数据未发送完成,剩余:%ld\n",tag,(_data->length() - sendIndex));
 				}
 				else if (sendIndex == _data->length())
 				{
@@ -291,9 +340,8 @@ void SocketThread::sendThread()
 			//发送成功，清除缓存数据
 			if (isSendOK)
 			{
-#ifdef COCOS2D_DEBUG
-				printf("\nsend head = %d", (int)_data->getHead());
-#endif
+				CCLOG("\nsend head = %d, size = %d", (int)_data->readHead(), (int)_data->readDword());
+
 				std::unique_lock<std::mutex> _lock(_mutex);
 				if (!sendList.empty())
 				{
@@ -314,25 +362,46 @@ void SocketThread::sendThread()
 		}
 /////////////////////////////////////////// send end OK //////////////////////////////////////////
 	}
-	isSendOver = true;
 	if (isExitThread)
 	{
 		NetService::getInstance()->removeSocket(tag);
 	}
+	isSendOver = true;
 }
 
 void SocketThread::recvThread()
 {
-	//short comStatus = COM_CONNECTED;
+	bool isExitThread = false;
+	short comStatus = COM_CONNECTED;
+	int retCode;
+
 	while (isRunning)
 	{
 		if (!isConnect)
 		{
-			//retCode = this->connectServer();
-			//if (retCode == -1)
-			//{
-			//}
-			continue;
+			retCode = this->connectServer();
+			if (retCode == -1) {
+				comStatus = COM_CONNECT_FAILED ;
+			}
+			/////////////////////////////////////////
+			if (comStatus == COM_CONNECT_FAILED)
+			{
+				isExitThread = true;
+
+				///////send error info message //////////
+				receiveItem->reuse();//must set to reuse.
+
+				receiveItem->setTag(tag);
+				receiveItem->pushHead(COM_TCP);
+
+				receiveItem->pushDword(retCode);
+				receiveItem->pushByte(host,128);
+				receiveItem->pushByte(port,16);
+				receiveItem->pushWord(tag);
+				NetService::getInstance()->pushCmd(receiveItem->buff(),receiveItem->length(),COM_TCP,COM_TCP,tag,comStatus);
+
+				break;// exit thread
+			}
 		}
 
 /////////////////////////////////////// receive header data ///////////////////////////////////////
@@ -352,6 +421,8 @@ void SocketThread::recvThread()
 
 			if (SOCKET_ERROR == rev || 0 == rev)// 服务器中断
 			{
+				CCLOG("ReceiveHeader失败 tag %d, errorcode：%d\n", \
+					tag, rev);
 				this->handleError();
 				break;
 			}
@@ -361,15 +432,11 @@ void SocketThread::recvThread()
 			}
 			else
 			{
-#ifdef COCOS2D_DEBUG
-				printf("---->conn thread tag=%d receive header left length =%ld\n",tag, HEADER_BUFFER_SIZE - curHeaderDataIndex);
-#endif
+				CCLOG("---->conn thread tag=%d receive header left length =%ld\n",tag, HEADER_BUFFER_SIZE - curHeaderDataIndex);
 			}
 		}
 		if (!isReceiveHeaderOK) {
-#ifdef COCOS2D_DEBUG
-			//printf("---->conn thread tag=%d receive header unsuccess \n",tag);
-#endif
+			CCLOG("---->conn thread tag=%d receive header unsuccess \n",tag);
 			continue; // continue for outer while loop /////
 		}
 		/////// receive header OK ////////////
@@ -390,9 +457,7 @@ void SocketThread::recvThread()
 				//repoint to new buffer
 				recvBuf = swapBuf;
 
-#ifdef COCOS2D_DEBUG
-				printf("==conn thread tag=%d realloc length =%d\n",tag,bufLength);
-#endif
+				CCLOG("==conn thread tag=%d realloc length =%d\n",tag,bufLength);
 			}
 
 			rev = 0;
@@ -405,6 +470,8 @@ void SocketThread::recvThread()
 
 				if (SOCKET_ERROR == rev || 0 == rev)
 				{
+					CCLOG("ReceiveHeader失败 tag %d, dataLength %d, errorcode：%d\n", \
+						tag, dataLength, rev);
 					this->handleError();
 					break;
 				}

@@ -37,9 +37,9 @@ public:
 
 public:
 	/**set receive message from NetService dispatcher*/
-	void setReceiveCmd();
+	virtual void setReceiveCmd() final;
 	/**set denied to receive message from NetService dispatcher*/
-	void setBlockCmd();
+	virtual void setBlockCmd() final;
 	/**get is receiving or not*/
 	bool getReceiveCmd() { return isReceiveCmd; }
 
@@ -50,6 +50,7 @@ public:
 
 	/**message handler and response state*/
 	virtual bool cmdHandle(CPackage * mCmd);
+	/** handler error state must There is one and only one*/
 	virtual bool notifyResponseState(CPackage * mCmd);
 
 private:
@@ -64,27 +65,14 @@ class NetService
 {
 public:
 	static NetService* getInstance();
-	static void purge();
 
-	/**start thread*/
-	void startThread();
-	/**stop thread*/
-	void stopThread();
-
-	/**main Thread*/
-	void handleThread();
-	/**handle delegates in function(handleThread)*/
-	bool handleDelegates(CPackage *mCmd);
-
-	/**remove all delegates*/
-	void removeAllDelegates(void);
+	/**remove all sokcets and cmd*/
+	void clear();
 	/**add delegate*/
 	void addDelegate(CmdHandleDelegate* mDelegate);
 	/**remove delegate*/
 	void removeDelegate(CmdHandleDelegate * mDelegate);
 
-	/**clear all socket handle*/
-	void clearSockets();
 	/**new socket and spawn a new SocketThread instance*/
 	void newSocket(const char * hostname,const char * port,int mTag=0);
 	/**get SocketThread instance by tag*/
@@ -94,18 +82,37 @@ public:
 	/**remove SocketThread instance by tag*/
 	void removeSocket(int mTag);
 
+	/**main Thread*/
+	void handleLoop(float mTime);
+private:
+	void purge();
+	/**remove all delegates*/
+	void removeAllDelegates(void);
+	/**clear all socket handle*/
+	void clearSockets();
+
+	/**stop thread*/
+	void stopThread();
+
+	/*handle remove array*/
+	void handleRemoveArray();
+
+	/**handle delegates in function(handleThread)*/
+	bool handleDelegates(CPackage *mCmd);
+
 	//cmd
 public:
 	/**push cmd from socket received*/
 	void pushCmd(const char * mData, int mDataLength, int mCmdType, int mActionType, int mTag, char mStatus);
 	/**send cmd to socket*/
 	void sendCmd(CPackage * mCmd);
+	/**clear message vector*/
+	void clearCmdVector();
+private:
 	/**pop command from command vector*/
 	CPackage * popCmd();
 	/**get command size*/
 	int cmdVectorSize();
-	/**clear message vector*/
-	void clearCmdVector();
 
 private:
 	NetService(void);
@@ -127,6 +134,7 @@ private:
 	vector<CmdHandleDelegate*> delegateArray;
 	//socket array
 	std::vector<SocketThread*> sokcetArray;
+	std::vector<SocketThread*> removeArray;
 
 	//command already receive from server
 	vector<CPackage*> cmdVector;

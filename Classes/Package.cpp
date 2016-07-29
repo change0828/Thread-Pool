@@ -1,9 +1,4 @@
-﻿#include "Package.h"
-#ifdef WIN32
-#include <winsock.h>
-#else
-#include <arpa/inet.h>
-#endif
+﻿#include "NetService.h"
 #include <iostream>
 using namespace std;
 
@@ -16,7 +11,7 @@ CPackage::CPackage(type_word size)
 	, _tag(0)
 {
 	m_pBuff = new char[m_siSize];
-	memset(m_pBuff, 0, sizeof(m_pBuff));
+	memset(m_pBuff, 0, m_siSize);
 }
 
 CPackage::~CPackage()
@@ -54,16 +49,17 @@ type_word CPackage::length(void)
 void CPackage::pushHead(type_word head)
 {
 	m_siHead = head;
-	pushWord(m_siHead);
 }
 type_word CPackage::readHead(void)
 {
-	m_siHead = readWord();
 	return m_siHead;
 }
 
 void CPackage::pushByte(type_byte value)
 {
+    if(this->size()-m_nWrPtr < BYTE_SIZE)
+        this->resize(BYTE_SIZE);
+    
 	memcpy((void*)(buff()+m_nWrPtr), &value, BYTE_SIZE);
 	m_nWrPtr += BYTE_SIZE;
 }
@@ -76,6 +72,9 @@ type_byte CPackage::readByte(void)
 
 void CPackage::pushByte(const char * data, type_word size)
 {
+	if(this->size()-m_nWrPtr < size)
+		this->resize(size);
+
 	type_word len = (type_word)strlen(data);
 	memcpy((void*)(buff()+m_nWrPtr), data, len);
 	memset((void*)(buff()+m_nWrPtr+len),0,size-len);
@@ -90,6 +89,9 @@ const char * CPackage::readByte(type_word size)
 
 void CPackage::pushWord(type_word value)
 {
+    if(this->size()-m_nWrPtr < WORD_SIZE)
+        this->resize(WORD_SIZE);
+    
 	value = htons(value);
 	memcpy((void*)(buff()+m_nWrPtr), &value, WORD_SIZE);
 	m_nWrPtr += WORD_SIZE;
@@ -104,6 +106,9 @@ type_word CPackage::readWord(void)
 
 void CPackage::pushDword(type_dword value)
 {
+    if(this->size()-m_nWrPtr < DWORD_SIZE)
+        this->resize(DWORD_SIZE);
+    
 	value = htonl(value);
 	memcpy((void*)(buff()+m_nWrPtr), &value, DWORD_SIZE);
 	m_nWrPtr += DWORD_SIZE;
