@@ -1,9 +1,8 @@
 ﻿#include "NetService.h"
 #include "SocketThread.h"
+#include "CCPlatform.h"
 
 #include <string.h>
-
-#include "cocos2d.h"
 
 using namespace std;
 
@@ -53,12 +52,6 @@ NetService* NetService::getInstance()
 	if (nullptr==_instance)
 	{
 		_instance = new NetService();
-		_instance->isRunning = true;
-		for (short i = 0; i < 10; i++)
-		{
-			CPackage * tmpCmd = new CPackage(512);
-			_instance->recyleBuffer.push_back(tmpCmd);
-		}
 
 	}
 	return _instance;
@@ -80,8 +73,13 @@ void NetService::clear()
 }
 
 NetService::NetService(void)
-	:isRunning(false)
+	:isRunning(true)
 {
+	for (short i = 0; i < 10; i++)
+	{
+		CPackage * tmpCmd = new CPackage(512);
+		_instance->recyleBuffer.push_back(tmpCmd);
+	}
 #ifdef WIN32
 	WSADATA wsaData;
 	WSAStartup(MAKEWORD(2, 0), &wsaData);
@@ -115,7 +113,7 @@ void NetService::addDelegate(CmdHandleDelegate* mDelegate)
 {
 	mDelegate->setReceiveCmd();
 	delegateArray.push_back(mDelegate);
-	CCLOG("+++++ add to operateArray delegate =%p name=%s \n", (mDelegate), typeid(*mDelegate).name());
+	NET_LOG("+++++ add to operateArray delegate =%p name=%s \n", (mDelegate), typeid(*mDelegate).name());
 }
 
 void NetService::removeDelegate(CmdHandleDelegate * mDelegate)
@@ -134,7 +132,7 @@ void NetService::removeDelegate(CmdHandleDelegate * mDelegate)
 			itr++;
 		}
 	}
-	CCLOG("---- remove to removedArray delegate =%p name=%s \n", (mDelegate), typeid(*mDelegate).name());
+	NET_LOG("---- remove to removedArray delegate =%p name=%s \n", (mDelegate), typeid(*mDelegate).name());
 }
 
 void NetService::removeAllDelegates(void)
@@ -193,7 +191,7 @@ void NetService::removeSocket(int mTag)
 			removeArray.push_back(_SocketT);
 			sokcetArray.erase(itr);
 
-			CCLOG("socket tag=%d remove from NetService\n",mTag);
+			NET_LOG("socket tag=%d remove from NetService\n",mTag);
 			break;
 		}
 	}
@@ -327,7 +325,7 @@ void NetService::pushCmd(const char * mData, int mDataLength, int mCmdType, int 
 				readedCmd = (CPackage *)(recyleBuffer.front());
 				readedCmd->reuse();//must set to reuse.
 				recyleBuffer.erase(recyleBuffer.begin());
-				CCLOG("reuse message =%p \n", readedCmd);
+				NET_LOG("reuse message =%p \n", readedCmd);
 			}
 			else
 			{
@@ -341,13 +339,13 @@ void NetService::pushCmd(const char * mData, int mDataLength, int mCmdType, int 
 				readedCmd->setStatus(mStatus); // cmd status. 1 = success, 0 = false
 				readedCmd->copy(mData+2, mDataLength-2);	//扣除head 长度
 				cmdVector.push_back(readedCmd);
-				CCLOG("ActionID =%d type=%d,status =%d,data length=%d \n", mCmdType, mActionType, mStatus, mDataLength);
+				NET_LOG("ActionID =%d type=%d,status =%d,data length=%d \n", mCmdType, mActionType, mStatus, mDataLength);
 			}
 			else if (mActionType == 0)
 			{
                 delete readedCmd;
                 readedCmd = nullptr;
-				CCLOG("heart beat ActionID =%d ,data length=%d \n", mCmdType, mDataLength);
+				NET_LOG("heart beat ActionID =%d ,data length=%d \n", mCmdType, mDataLength);
 			}
 		}
 	}
@@ -369,7 +367,7 @@ void NetService::sendCmd(CPackage * mCmd)
 	}
 	else
 	{
-		CCLOG("send command failed ,no valid socket item or not connect \n");
+		NET_LOG("send command failed ,no valid socket item or not connect \n");
 	}
 }
 

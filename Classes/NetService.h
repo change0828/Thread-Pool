@@ -72,6 +72,8 @@ public:
 	void addDelegate(CmdHandleDelegate* mDelegate);
 	/**remove delegate*/
 	void removeDelegate(CmdHandleDelegate * mDelegate);
+	/**remove all delegates*/
+	void removeAllDelegates(void);
 
 	/**new socket and spawn a new SocketThread instance*/
 	void newSocket(const char * hostname,const char * port,int mTag=0);
@@ -86,8 +88,6 @@ public:
 	void handleLoop(float mTime);
 private:
 	void purge();
-	/**remove all delegates*/
-	void removeAllDelegates(void);
 	/**clear all socket handle*/
 	void clearSockets();
 
