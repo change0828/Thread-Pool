@@ -314,12 +314,11 @@ bool NetService::handleDelegates(CPackage *mCmd)
 
 void NetService::pushCmd(const char * mData, int mDataLength, int mCmdType, int mActionType, int mTag, char mStatus)
 {
-	std::unique_lock<std::mutex> _lock(_mutex);
-
 	if (mData != NULL)
 	{
 		if (mDataLength >= 0) {
 			CPackage * readedCmd = NULL;
+			std::unique_lock<std::mutex> _lock(_mutex);
 			if (recyleBuffer.empty() == false)
 			{
 				readedCmd = (CPackage *)(recyleBuffer.front());
@@ -331,7 +330,7 @@ void NetService::pushCmd(const char * mData, int mDataLength, int mCmdType, int 
 			{
 				readedCmd = new CPackage(mDataLength + 2);
 			}
-
+			_lock.unlock();
 			if (mActionType != 0) {
 				//readedCmd->setCmdType(mCmdType);
 				readedCmd->pushHead(mActionType);

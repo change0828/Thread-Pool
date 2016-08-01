@@ -164,7 +164,7 @@ void SocketThread::addToSendBuffer(const char * mData,unsigned int mDataLength,i
 	sendList.push_back(_readBuffer);
 	_lock.unlock();
 
-	waitNotify.notify_all();
+	waitNotify.notify_one();
 }
 
 int SocketThread::connectServer()
