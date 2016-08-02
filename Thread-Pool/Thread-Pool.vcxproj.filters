@@ -37,8 +37,5 @@
     <ClInclude Include="..\Classes\NetService.h">
       <Filter>Classes</Filter>
     </ClInclude>
-    <ClInclude Include="..\Classes\CCPlatform.h">
-      <Filter>Classes</Filter>
-    </ClInclude>
   </ItemGroup>
 </Project>

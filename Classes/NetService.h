@@ -9,6 +9,11 @@
 #include "SocketThread.h"
 #include <vector>
 
+ /*
+ * 打印错误信息到错误缓冲区(ut_error_message)
+ */
+int on_error(const char *format, ...);
+
 //communication type for http,tcp,and http downloading
 enum COM_TYPE {
 	COM_HTTP = 1,

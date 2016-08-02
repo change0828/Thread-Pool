@@ -1,27 +1,12 @@
 ﻿#include "SocketThread.h"
 #include "NetService.h"
-#include "CCPlatform.h"
 
 #include <string.h>
 #include <errno.h>
 
 #define SIZE 100
-/*
- * 打印错误信息到错误缓冲区(ut_error_message)，私有函数
- */
-static int on_error(const char *format, ...)
-{
-	int bytes_written;
-	va_list arg_ptr;
-	
-	va_start(arg_ptr, format);
 
-	bytes_written = vfprintf(stderr, format, arg_ptr);
-	
-	va_end(arg_ptr);
-
-	return bytes_written;
-}
+extern int on_log(const char *format, ...);
 
 SocketThread::SocketThread(const char * mHost,const char * mPort,int mTag)
 	:tag(mTag)
@@ -186,11 +171,11 @@ int SocketThread::connectServer()
 	hint.ai_flags = AI_CANONNAME;	//获取域名
 	hint.ai_family = AF_UNSPEC;		//
 	hint.ai_socktype = SOCK_STREAM; //数据流
-	NET_LOG("域名解析 host %s, port %s\n",host,port);
+	on_log("域名解析 host %s, port %s\n",host,port);
 	int ret = getaddrinfo(host, port, &hint, &_addrinfo); 
 	if (SOCKET_OK!=ret) { 
 		/** 域名解析失败*/
-		NET_LOG("域名解析失败 host %s, port %s\n", \
+		on_log("域名解析失败 host %s, port %s\n", \
 			host, port);
 		return ret;
 	} 
@@ -201,21 +186,21 @@ int SocketThread::connectServer()
 		_socket = socket(curr->ai_family, curr->ai_socktype, curr->ai_protocol);
 		if (SOCKET_ERROR==_socket)
 		{
-			NET_LOG("创建套接字失败 host %s, port %s errorcode：%d\n", \
+			on_log("创建套接字失败 host %s, port %s errorcode：%d\n", \
 				host, port, _socket);
 			continue;
 		}
 
-		NET_LOG("socket is : %d", _socket);
+		on_log("socket is : %d", _socket);
 		_connect = connect(_socket, curr->ai_addr, (int)curr->ai_addrlen);
 		if (0!= _connect)
 		{
-			NET_LOG("连接失败 host %s, port %s errorcode：%d\n", \
+			on_log("连接失败 host %s, port %s errorcode：%d\n", \
 				host, port, _connect);
 			continue;
 		}
 		isConnect = true;
-		NET_LOG("连接成功");
+		on_log("连接成功");
 		//IP 地址
 		if (AF_UNSPEC == curr->ai_family)
 		{
@@ -236,11 +221,11 @@ int SocketThread::connectServer()
 			inet_ntop(curr->ai_family, &sockaddr_ipv6->sin6_addr, _ipaddr, sizeof(_ipaddr));
 #endif
 		}
-		NET_LOG("analysis IP：%s\n",_ipaddr);
+		on_log("analysis IP：%s\n",_ipaddr);
 		break;
     }
     freeaddrinfo(_addrinfo);
-	NET_LOG("connectServer host %s port %s", host, port);
+	on_log("connectServer host %s port %s", host, port);
 	
 	return _connect;
 }
@@ -265,7 +250,7 @@ void SocketThread::handleError()
 void SocketThread::sendThread()
 {
 	bool isExitThread = false;
-	short comStatus = COM_CONNECTED;
+	char comStatus = COM_CONNECTED;
 	int retCode;
 
 	while (isRunning)
@@ -306,7 +291,7 @@ void SocketThread::sendThread()
 		int _length = 0;
 
 		//线程等待获取发送数据
-		std::unique_lock<std::mutex> _lock(_mutex);
+		_lock.lock();
 		CPackage* _data = *sendList.begin();
 		_lock.unlock();
 
@@ -317,7 +302,7 @@ void SocketThread::sendThread()
 
 			if (SOCKET_ERROR == _length)
 			{
-				NET_LOG("发送失败 tag %d, head %d errorcode：%d\n", \
+				on_log("发送失败 tag %d, head %d errorcode：%d\n", \
 					tag, _data->getHead(), _length);
 
 				this->handleError();
@@ -327,12 +312,12 @@ void SocketThread::sendThread()
 			sendIndex += _length;
 			if (sendIndex > _data->length())
 			{
-				NET_LOG("send data error  _length > data->length()");
+				on_log("send data error  _length > data->length()");
 				break;
 			}
 			else if (sendIndex < _data->length())
 			{
-				NET_LOG("raw_send tag=%d: 数据未发送完成,剩余:%ld\n", tag, (_data->length() - sendIndex));
+				on_log("raw_send tag=%d: 数据未发送完成,剩余:%ld\n", tag, (_data->length() - sendIndex));
 			}
 			else if (sendIndex == _data->length())
 			{
@@ -342,7 +327,7 @@ void SocketThread::sendThread()
 		//发送成功，清除缓存数据
 		if (isSendOK)
 		{
-			NET_LOG("\nsend head = %d, size = %d", (int)_data->readHead(), (int)_data->readDword());
+			on_log("\nsend head = %d, size = %d", (int)_data->readHead(), (int)_data->readDword());
 
 			std::unique_lock<std::mutex> _lock(_mutex);
 			if (!sendList.empty())
@@ -368,7 +353,7 @@ void SocketThread::sendThread()
 void SocketThread::recvThread()
 {
 	bool isExitThread = false;
-	short comStatus = COM_CONNECTED;
+	char comStatus = COM_CONNECTED;
 	int retCode;
 
 	while (isRunning)
@@ -417,7 +402,7 @@ void SocketThread::recvThread()
 
 			if (SOCKET_ERROR == rev || 0 == rev)// 服务器中断
 			{
-				NET_LOG("ReceiveHeader失败 tag %d, errorcode：%d\n", \
+				on_log("ReceiveHeader失败 tag %d, errorcode：%d\n", \
 					tag, rev);
 				this->handleError();
 				break;
@@ -428,11 +413,11 @@ void SocketThread::recvThread()
 			}
 			else
 			{
-				NET_LOG("---->conn thread tag=%d receive header left length =%ld\n",tag, HEADER_BUFFER_SIZE - curHeaderDataIndex);
+				on_log("---->conn thread tag=%d receive header left length =%ld\n",tag, HEADER_BUFFER_SIZE - curHeaderDataIndex);
 			}
 		}
 		if (!isReceiveHeaderOK) {
-			NET_LOG("---->conn thread tag=%d receive header unsuccess \n",tag);
+			on_log("---->conn thread tag=%d receive header unsuccess \n",tag);
 			continue; // continue for outer while loop /////
 		}
 		/////// receive header OK ////////////
@@ -453,7 +438,7 @@ void SocketThread::recvThread()
 				//repoint to new buffer
 				recvBuf = swapBuf;
 
-				NET_LOG("==conn thread tag=%d realloc length =%d\n",tag,bufLength);
+				on_log("==conn thread tag=%d realloc length =%d\n",tag,bufLength);
 			}
 
 			rev = 0;
@@ -466,7 +451,7 @@ void SocketThread::recvThread()
 
 				if (SOCKET_ERROR == rev || 0 == rev)
 				{
-					NET_LOG("ReceiveHeader失败 tag %d, dataLength %d, errorcode：%d\n", \
+					on_log("ReceiveHeader失败 tag %d, dataLength %d, errorcode：%d\n", \
 						tag, dataLength, rev);
 					this->handleError();
 					break;
