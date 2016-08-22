@@ -1,101 +1,54 @@
-#include "NetService.h"
 
-#ifdef _DEBUG
-#define DEBUG_CLIENTBLOCK new( _CLIENT_BLOCK, __FILE__, __LINE__)
-#else
-#define DEBUG_CLIENTBLOCK
-#endif  // _DEBUG
-#define _CRTDBG_MAP_ALLOC
-#include <stdlib.h>
-#include <crtdbg.h>
-#ifdef _DEBUG
-#define new DEBUG_CLIENTBLOCK
-#endif  // _DEBUG
+#include <iostream>       // std::cout
+#include <atomic>         // std::atomic
+#include <thread>         // std::thread, std::this_thread::yield
 
-#include <random>
+std::atomic<int> foo = 0;
+std::atomic<int> bar = 0;
 
-class testCMD : public CmdHandleDelegate
+void set_foo(int x)
 {
-public:
-	testCMD();
-	~testCMD();
-
-	virtual bool cmdHandle(CPackage * mCmd);
-	virtual bool notifyResponseState(CPackage * mCmd);
-private:
-
-};
-
-testCMD::testCMD()
-{
+	foo = x;
 }
 
-testCMD::~testCMD()
+void copy_foo_to_bar()
 {
+
+	// 如果 foo == 0，则该线程 yield,
+	// 在 foo == 0 时, 实际也是隐含了类型转换操作,
+	// 因此也包含了 operator T() const 的调用.
+	while (foo == 0) std::this_thread::yield();
+
+	// 实际调用了 operator T() const, 将foo 强制转换成 int 类型,
+	// 然后调用 operator=().
+	bar = static_cast<int>(foo);
 }
 
-bool testCMD::cmdHandle(CPackage * mCmd)
+void print_bar()
 {
-	printf("bool testCMD::cmdHandle(CPackage * mCmd) mCmd head %d \n", mCmd->getHead());
-	return true;
+	int x = 0;
+	// 如果 bar == 0，则该线程 yield,
+	// 在 bar == 0 时, 实际也是隐含了类型转换操作,
+	// 因此也包含了 operator T() const 的调用.
+	while (bar == 0)
+	{
+		std::this_thread::yield();
+	}
+	std::cout << "bar: " << bar << '\n';
 }
-
-bool testCMD::notifyResponseState(CPackage * mCmd)
-{
-	printf("bool testCMD::notifyResponseState(CPackage * mCmd) mCmd head %d \n", mCmd->getHead());
-	return true;
-}
-
-// 发送聊天数据
-#define SENDERCHITCHAT(pack) CGame::sendChitchatData(pack);
-// 创建发送包
-#define NEWPACK CPackage *pack = new CPackage();
-
-#define LEN_NAME 20
-#define LEN_PASS 33
-
-bool isRunning = true;
-
-void sendThread();
 
 int main()
 {
-	testCMD *_Delegate = new testCMD;
-	NetService::getInstance()->newSocket("192.168.1.120", "7000");
-	//NetService::getInstance()->newSocket("180.150.185.60", "7000");
-	NetService::getInstance()->addDelegate(_Delegate);
-	
-	for (int i = 0; i < 100; i++)
+	//std::thread first(print_bar);
+	//std::thread second(set_foo, 10);
+	//std::thread third(copy_foo_to_bar);
+
+	//first.join();
+	//second.join();
+	//third.join();
+	for (int level = 0; level <= 40; level++)
 	{
-		thread thread1(sendThread);
-		thread1.detach();
+		std::cout << " level : " << level << " floor(pow(level, 1.6) * 8.0f/10.0f)*10.0f : " << floor(pow(level, 1.6) * 8.0f / 10.0f)*10.0f << '\n';
 	}
-
-	while (true)
-	{
-
-	}
-	isRunning = false;
-	NetService::getInstance()->stopThread();
-	this_thread::sleep_for(std::chrono::seconds(10));
-
-	NetService::getInstance()->purge();
-	delete _Delegate;
-	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 	return 0;
-}
-
-void sendThread()
-{
-	while (isRunning)
-	{
-		this_thread::sleep_for(std::chrono::milliseconds(rand()%100));
-		NEWPACK
-		pack->pushHead(1005);
-		pack->pushWord(1000);
-		pack->pushByte("130001", 64);
-		pack->pushByte("123456", 64);
-		NetService::getInstance()->sendCmd(pack);
-		delete pack;
-	}
 }

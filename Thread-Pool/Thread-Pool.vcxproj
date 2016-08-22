@@ -150,11 +150,13 @@
     <ClCompile Include="..\Classes\Package.cpp" />
     <ClCompile Include="..\Classes\SocketThread.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="threadsafe_queue.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Classes\NetService.h" />
     <ClInclude Include="..\Classes\Package.h" />
     <ClInclude Include="..\Classes\SocketThread.h" />
+    <ClInclude Include="threadsafe_queue.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
