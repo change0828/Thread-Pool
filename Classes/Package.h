@@ -30,6 +30,7 @@ class  CPackage
 {
 public:
 	CPackage(type_word size = 256);
+	CPackage(CPackage&& other);
 	~CPackage();
 
 	void ready(void);
@@ -93,6 +94,6 @@ private:
 	/** socket tag */
 	int			_tag;
 	//command status
-	char status;
+	char _status;
 };
 #endif

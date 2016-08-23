@@ -1,54 +1,100 @@
+ï»¿#include "NetService.h"
 
-#include <iostream>       // std::cout
-#include <atomic>         // std::atomic
-#include <thread>         // std::thread, std::this_thread::yield
+#ifdef _DEBUG
+#define DEBUG_CLIENTBLOCK new( _CLIENT_BLOCK, __FILE__, __LINE__)
+#else
+#define DEBUG_CLIENTBLOCK
+#endif  // _DEBUG
+#define _CRTDBG_MAP_ALLOC
+#include <stdlib.h>
+#include <crtdbg.h>
+#ifdef _DEBUG
+#define new DEBUG_CLIENTBLOCK
+#endif  // _DEBUG
 
-std::atomic<int> foo = 0;
-std::atomic<int> bar = 0;
+#include <random>
 
-void set_foo(int x)
+class testCMD : public CmdHandleDelegate
 {
-	foo = x;
+public:
+	testCMD();
+	~testCMD();
+
+	virtual bool cmdHandle(CPackage * mCmd);
+	virtual bool notifyResponseState(CPackage * mCmd);
+private:
+
+};
+
+testCMD::testCMD()
+{
 }
 
-void copy_foo_to_bar()
+testCMD::~testCMD()
 {
-
-	// Èç¹û foo == 0£¬Ôò¸ÃÏß³Ì yield,
-	// ÔÚ foo == 0 Ê±, Êµ¼ÊÒ²ÊÇÒşº¬ÁËÀàĞÍ×ª»»²Ù×÷,
-	// Òò´ËÒ²°üº¬ÁË operator T() const µÄµ÷ÓÃ.
-	while (foo == 0) std::this_thread::yield();
-
-	// Êµ¼Êµ÷ÓÃÁË operator T() const, ½«foo Ç¿ÖÆ×ª»»³É int ÀàĞÍ,
-	// È»ºóµ÷ÓÃ operator=().
-	bar = static_cast<int>(foo);
 }
 
-void print_bar()
+bool testCMD::cmdHandle(CPackage * mCmd)
 {
-	int x = 0;
-	// Èç¹û bar == 0£¬Ôò¸ÃÏß³Ì yield,
-	// ÔÚ bar == 0 Ê±, Êµ¼ÊÒ²ÊÇÒşº¬ÁËÀàĞÍ×ª»»²Ù×÷,
-	// Òò´ËÒ²°üº¬ÁË operator T() const µÄµ÷ÓÃ.
-	while (bar == 0)
-	{
-		std::this_thread::yield();
-	}
-	std::cout << "bar: " << bar << '\n';
+	printf("bool testCMD::cmdHandle(CPackage * mCmd) mCmd head %d \n", mCmd->getHead());
+	return true;
 }
+
+bool testCMD::notifyResponseState(CPackage * mCmd)
+{
+	printf("bool testCMD::notifyResponseState(CPackage * mCmd) mCmd head %d \n", mCmd->getHead());
+	return true;
+}
+
+// å‘é€èŠå¤©æ•°æ®
+#define SENDERCHITCHAT(pack) CGame::sendChitchatData(pack);
+// åˆ›å»ºå‘é€åŒ…
+#define NEWPACK CPackage *pack = new CPackage();
+
+#define LEN_NAME 20
+#define LEN_PASS 33
+
+bool isRunning = true;
+
+void sendThread();
 
 int main()
 {
-	//std::thread first(print_bar);
-	//std::thread second(set_foo, 10);
-	//std::thread third(copy_foo_to_bar);
-
-	//first.join();
-	//second.join();
-	//third.join();
-	for (int level = 0; level <= 40; level++)
+	testCMD *_Delegate = new testCMD;
+	NetService::getInstance()->newSocket("192.168.1.120", "7000");
+	//NetService::getInstance()->newSocket("180.150.185.60", "7000");
+	NetService::getInstance()->addDelegate(_Delegate);
+	
+	for (int i = 0; i < 1; i++)
 	{
-		std::cout << " level : " << level << " floor(pow(level, 1.6) * 8.0f/10.0f)*10.0f : " << floor(pow(level, 1.6) * 8.0f / 10.0f)*10.0f << '\n';
+		thread thread1(sendThread);
+		thread1.detach();
 	}
+
+	while (true)
+	{
+
+	}
+	isRunning = false;
+
+	this_thread::sleep_for(std::chrono::seconds(10));
+
+	delete _Delegate;
+	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 	return 0;
+}
+
+void sendThread()
+{
+	while (isRunning)
+	{
+		this_thread::sleep_for(std::chrono::milliseconds(rand()%100));
+		NEWPACK
+		pack->pushHead(1005);
+		pack->pushWord(1000);
+		pack->pushByte("130001", 64);
+		pack->pushByte("123456", 64);
+		NetService::getInstance()->sendCmd(pack);
+		delete pack;
+	}
 }

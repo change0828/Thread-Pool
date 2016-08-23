@@ -30,12 +30,7 @@
 #define SOCKET_OK 0
 
 // thread
-#include <thread>
-#include <mutex>
-#include <condition_variable>
-
-#include <vector>
-
+#include "threadsafe_queue.h"
 #include "Package.h"
 
 using namespace std;
@@ -96,17 +91,15 @@ private:
 	//close socket by user.
 	bool closeSocketByUser; 
 	//send buffer
-	vector<CPackage*> sendList;
+	threadsafe_queue<CPackage> sendList;
 	//recyle CPackage sended
-	vector<CPackage*> recyleList;
+	threadsafe_queue<CPackage> recyleList;
 	//message item
 	CPackage * receiveItem;
 
 	SOCKET _socket;
 	//mutex used for thread synchronization
 	mutex _mutex;
-	// 条件开启发送线程
-	std::condition_variable waitNotify; 
 	//thread handle
 	thread _sendThread;
 	thread _recvThread;

@@ -3,6 +3,7 @@
 
 #include <string.h>
 #include <errno.h>
+#include <iostream>
 
 #define SIZE 100
 
@@ -45,23 +46,18 @@ SocketThread::~SocketThread(void)
 		receiveItem = NULL;
 	}
 
-	for (size_t i = 0; i < sendList.size(); i++) {
-		CPackage * tmpArray = (CPackage *)sendList.at(i);
-		if (tmpArray) {
-			delete tmpArray;
-			tmpArray = NULL;
-		}
+	auto data = sendList.try_pop();
+	while (data)
+	{
+		data.reset();
+		data = sendList.try_pop();
 	}
-	sendList.clear();
-
-	for (size_t i = 0; i < recyleList.size(); i++) {
-		CPackage * tmpArray = (CPackage *)recyleList.at(i);
-		if (tmpArray) {
-			delete tmpArray;
-			tmpArray = NULL;
-		}
+	data = recyleList.try_pop();
+	while (data)
+	{
+		data.reset();
+		data = recyleList.try_pop();
 	}
-	recyleList.clear();
 
 	isRunning = false;
 }
@@ -71,8 +67,8 @@ void SocketThread::startThread()
 	isRunning = true;
 
 	this->connectServer();
-	_sendThread = thread(&SocketThread::sendThread, this);
-	_sendThread.detach();
+	//_sendThread = thread(&SocketThread::sendThread, this);
+	//_sendThread.detach();
 	_recvThread = thread(&SocketThread::recvThread, this);
 	_recvThread.detach();
 }
@@ -86,9 +82,7 @@ void SocketThread::stopThread()
 	isReceiveOK = false;
 	isConnect = false;
 
-	//发送线程可能等待通知
-	waitNotify.notify_all();
-
+	sendList.push(CPackage());
 	//默认情况下，close()/closesocket() 会立即向网络中发送FIN包，不管输出缓冲区中是否还有数据，而shutdown() 会等输出缓冲区中的数据传输完毕再发送FIN包。
 	//也就意味着，调用 close()/closesocket() 将丢失输出缓冲区中的数据，而调用 shutdown() 不会。
 	//shutdown(_socket, SHUT_RDWR);
@@ -119,9 +113,7 @@ bool SocketThread::isThreadOver()
 
 void SocketThread::addToSendBuffer(const char * mData,unsigned int mDataLength,int mHeadType)
 {
-	CPackage *_readBuffer = nullptr;
-
-	std::unique_lock<std::mutex> _lock(_mutex);
+	std::shared_ptr<CPackage>_readBuffer = nullptr;
 
 	if (isSendOver || isRecvOver)
 	{
@@ -131,25 +123,22 @@ void SocketThread::addToSendBuffer(const char * mData,unsigned int mDataLength,i
 	if (!recyleList.empty())
 	{
 		//printf("\n before -- recyleList size is %d ", recyleList.size());
-		_readBuffer = (CPackage*)(recyleList.front());
+		_readBuffer = recyleList.try_pop();
 		_readBuffer->reuse();//must set to reuse.
-		recyleList.erase(recyleList.begin());
 		//printf("\n -- erase recyleList size is %d ", recyleList.size());
-
 	}
-	else
+	if (nullptr == _readBuffer)
 	{
-		_readBuffer = new CPackage(mDataLength + AUGMENT_SIZE_LEN);
+		_readBuffer = std::make_shared<CPackage>(mDataLength + AUGMENT_SIZE_LEN);// new CPackage(mDataLength + AUGMENT_SIZE_LEN);
 	}
+
 	_readBuffer->pushHead(mHeadType);
 	_readBuffer->pushDword(mDataLength+WORD_SIZE);
 	_readBuffer->pushWord(mHeadType);
 	_readBuffer->copy(mData, mDataLength);
 
-	sendList.push_back(_readBuffer);
-	_lock.unlock();
-
-	waitNotify.notify_one();
+	sendList.push(std::move(*_readBuffer.get()));
+	std::cout << "count _readBuffer:" << _readBuffer.use_count() << std::endl;
 }
 
 int SocketThread::connectServer()
@@ -283,17 +272,12 @@ void SocketThread::sendThread()
 		}
 /////////////////////////////////////////// send start //////////////////////////////////////////
 
-		std::unique_lock<std::mutex> _lock(_mutex);
-		waitNotify.wait(_lock, [this]{ return !sendList.empty(); });
-
 		bool isSendOK = false;
 		int sendIndex = 0;
 		int _length = 0;
 
 		//线程等待获取发送数据
-		_lock.lock();
-		CPackage* _data = *sendList.begin();
-		_lock.unlock();
+		CPackage* _data = sendList.wait_and_pop().get();
 
 		while (!isSendOK)
 		{
@@ -329,17 +313,13 @@ void SocketThread::sendThread()
 		{
 			on_log("\nsend head = %d, size = %d", (int)_data->readHead(), (int)_data->readDword());
 
-			std::unique_lock<std::mutex> _lock(_mutex);
-			if (!sendList.empty())
-			{
-				sendList.erase(sendList.begin());
-			}
 			//printf("\n before ++ recyleList size is %d ", recyleList.size());
-			recyleList.push_back(_data);
+			recyleList.push(std::move(*_data));
 			//printf("\n ++ recyleList size is %d ", recyleList.size());
 		}
 		else
 		{
+			sendList.push(std::move(*_data));
 		}
 /////////////////////////////////////////// send end OK //////////////////////////////////////////
 	}

@@ -2,16 +2,30 @@
 #include <iostream>
 using namespace std;
 
-CPackage::CPackage(type_word size)
+CPackage::CPackage(type_word size /* = 256 */)
 	:m_siSize(size)
 	,m_sBuffSize(0)
 	,m_siHead(0)
 	,m_nRdptr(0)
 	,m_nWrPtr(0)
 	, _tag(0)
+	, _status(0)
 {
 	m_pBuff = new char[m_siSize];
 	memset(m_pBuff, 0, m_siSize);
+}
+
+CPackage::CPackage(CPackage&& other)
+{
+	m_pBuff = other.m_pBuff;
+	other.m_pBuff = nullptr;
+	m_siSize = other.m_siSize;
+	m_sBuffSize = other.m_sBuffSize;
+	m_siHead = other.m_siHead;
+	m_nRdptr = other.m_nRdptr;
+	m_nWrPtr = other.m_nWrPtr;
+	_tag = other._tag;
+	_status = other._status;
 }
 
 CPackage::~CPackage()
@@ -146,12 +160,12 @@ bool CPackage::readFinish()
 
 void CPackage::setStatus(char mStatus)
 {
-	status = mStatus;
+	_status = mStatus;
 }
 
 char CPackage::getStatus()
 {
-	return  status;
+	return  _status;
 }
 
 void CPackage::reuse()

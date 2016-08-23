@@ -26,9 +26,6 @@
     <ClCompile Include="..\Classes\NetService.cpp">
       <Filter>Classes</Filter>
     </ClCompile>
-    <ClCompile Include="threadsafe_queue.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Classes\Package.h">
@@ -40,6 +37,6 @@
     <ClInclude Include="..\Classes\NetService.h">
       <Filter>Classes</Filter>
     </ClInclude>
-    <ClInclude Include="threadsafe_queue.h" />
+    <ClInclude Include="..\Classes\threadsafe_queue.h" />
   </ItemGroup>
 </Project>
