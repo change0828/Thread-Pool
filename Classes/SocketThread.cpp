@@ -67,8 +67,8 @@ void SocketThread::startThread()
 	isRunning = true;
 
 	this->connectServer();
-	//_sendThread = thread(&SocketThread::sendThread, this);
-	//_sendThread.detach();
+	_sendThread = thread(&SocketThread::sendThread, this);
+	_sendThread.detach();
 	_recvThread = thread(&SocketThread::recvThread, this);
 	_recvThread.detach();
 }
@@ -277,33 +277,33 @@ void SocketThread::sendThread()
 		int _length = 0;
 
 		//线程等待获取发送数据
-		CPackage* _data = sendList.wait_and_pop().get();
+		auto data = sendList.wait_and_pop();
 
 		while (!isSendOK)
 		{
 
-			_length = ::send(_socket, _data->buff(), _data->length(), 0);
+			_length = ::send(_socket, data->buff(), data->length(), 0);
 
 			if (SOCKET_ERROR == _length)
 			{
 				on_log("发送失败 tag %d, head %d errorcode：%d\n", \
-					tag, _data->getHead(), _length);
+					tag, data->getHead(), _length);
 
 				this->handleError();
 				break;
 			}
 
 			sendIndex += _length;
-			if (sendIndex > _data->length())
+			if (sendIndex > data->length())
 			{
 				on_log("send data error  _length > data->length()");
 				break;
 			}
-			else if (sendIndex < _data->length())
+			else if (sendIndex < data->length())
 			{
-				on_log("raw_send tag=%d: 数据未发送完成,剩余:%ld\n", tag, (_data->length() - sendIndex));
+				on_log("raw_send tag=%d: 数据未发送完成,剩余:%ld\n", tag, (data->length() - sendIndex));
 			}
-			else if (sendIndex == _data->length())
+			else if (sendIndex == data->length())
 			{
 				isSendOK = true;
 			}
@@ -311,15 +311,15 @@ void SocketThread::sendThread()
 		//发送成功，清除缓存数据
 		if (isSendOK)
 		{
-			on_log("\nsend head = %d, size = %d", (int)_data->readHead(), (int)_data->readDword());
+			on_log("\nsend head = %d, size = %d", (int)data->readHead(), (int)data->readDword());
 
 			//printf("\n before ++ recyleList size is %d ", recyleList.size());
-			recyleList.push(std::move(*_data));
+			recyleList.push(std::move(*data));
 			//printf("\n ++ recyleList size is %d ", recyleList.size());
 		}
 		else
 		{
-			sendList.push(std::move(*_data));
+			sendList.push(std::move(*data));
 		}
 /////////////////////////////////////////// send end OK //////////////////////////////////////////
 	}

@@ -5,14 +5,10 @@
 #ifndef __NetService_H__
 #define __NetService_H__
 
-#include "Package.h"
-#include "SocketThread.h"
 #include <vector>
 
- /*
- * 打印错误信息到错误缓冲区(ut_error_message)
- */
-int on_error(const char *format, ...);
+#include "Package.h"
+#include "SocketThread.h"
 
 //communication type for http,tcp,and http downloading
 enum COM_TYPE {
@@ -114,17 +110,15 @@ public:
 	/**clear message vector*/
 	void clearCmdVector();
 private:
-	/**pop command from command vector*/
-	CPackage * popCmd();
 	/**get command size*/
-	int cmdVectorSize();
+	//int cmdVectorSize();
 
 private:
 	NetService(void);
 	~NetService(void);
 
 	/** 断开网络*/
-	void _cleanNet();
+	//void _cleanNet();
 private:
 	static NetService *_instance;
 
@@ -142,8 +136,8 @@ private:
 	std::vector<SocketThread*> removeArray;
 
 	//command already receive from server
-	vector<CPackage*> cmdVector;
+	threadsafe_queue<CPackage> cmdVector;
 	//recyle ByteArray used
-	vector<CPackage*> recyleBuffer;
+	threadsafe_queue<CPackage> recyleBuffer;
 };
 #endif

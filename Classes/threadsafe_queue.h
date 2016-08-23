@@ -27,11 +27,6 @@ private:
 	}
 	std::unique_ptr<node> pop_head()
 	{
-		std::lock_guard<std::mutex> head_lock(head_mutex);
-		if (head.get() == get_tail())
-		{
-			return nullptr;
-		}
 		std::unique_ptr<node> old_head = std::move(head);
 		head = std::move(old_head->next);
 		--_size;
@@ -44,12 +39,12 @@ private:
 		data_cond.wait(head_lock, [&] { return head.get() != get_tail(); });
 		return std::move(head_lock);
 	}
-	std::unique_ptr<node> wait_for_head()
+	std::unique_ptr<node> wait_pop_head()
 	{
 		std::unique_lock<std::mutex> head_lock(wait_for_data());
 		return pop_head();
 	}
-	std::unique_ptr<node> wait_for_head(T& value)
+	std::unique_ptr<node> wait_pop_head(T& value)
 	{
 		std::unique_lock<std::mutex> head_lock(wait_for_data());
 		value = std::move(*head->data);
@@ -96,14 +91,14 @@ public:
 	}
 	std::shared_ptr<T> wait_and_pop()
 	{
-		std::unique_ptr<node> const old_head = wait_for_head();
+		std::unique_ptr<node> const old_head = wait_pop_head();
 		return old_head->data;
 	}
 	void wait_and_pop(T& value)
 	{
-		std::unique_ptr<node> const old_head = wait_for_head(value);
+		std::unique_ptr<node> const old_head = wait_pop_head(value);
 	}
-	void push(T new_value)
+	void push(T&& new_value)
 	{
 		std::shared_ptr<T> new_data(std::make_shared<T>(std::move(new_value)));
 		std::unique_ptr<node> p(new node);
@@ -114,9 +109,9 @@ public:
 			tail->next = std::move(p);
 			tail = new_tail;
 		}
-		data_cond.notify_one();
 		++_size;
 		printf("++size %d name=%s \n", _size, typeid(*this).name());
+		data_cond.notify_one();
 	}
 	bool empty()
 	{
