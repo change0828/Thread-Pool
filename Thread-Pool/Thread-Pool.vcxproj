@@ -155,6 +155,7 @@
     <ClInclude Include="..\Classes\NetService.h" />
     <ClInclude Include="..\Classes\Package.h" />
     <ClInclude Include="..\Classes\SocketThread.h" />
+    <ClInclude Include="..\Classes\threadsafe_list.h" />
     <ClInclude Include="..\Classes\threadsafe_queue.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

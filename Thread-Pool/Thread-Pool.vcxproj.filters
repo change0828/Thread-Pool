@@ -38,5 +38,6 @@
       <Filter>Classes</Filter>
     </ClInclude>
     <ClInclude Include="..\Classes\threadsafe_queue.h" />
+    <ClInclude Include="..\Classes\threadsafe_list.h" />
   </ItemGroup>
 </Project>

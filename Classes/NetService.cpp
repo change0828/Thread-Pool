@@ -241,11 +241,10 @@ void NetService::handleLoop(float mTime)
 	{
 		bool isCmdHandled = this->handleDelegates(readCmd.get());
 		if (isCmdHandled == false) {
-			//cmdVector.insert(cmdVector.begin(), readCmd);
-			cmdVector.push(std::move(*readCmd.get()));
+			cmdVector.push_front(*readCmd.get());
 		}
 		else {
-			recyleBuffer.push(std::move(*readCmd.get()));
+			recyleBuffer.push_back(*readCmd.get());
 		}
 	}
 }
@@ -333,7 +332,7 @@ void NetService::pushCmd(const char * mData, int mDataLength, int mCmdType, int 
 			{
 				readedCmd = recyleBuffer.try_pop();
 				readedCmd->reuse();//must set to reuse.
-				on_log("reuse message =%p \n", readedCmd);
+				on_log("reuse message =%p \n", readedCmd.get());
 			}
 			else
 			{
@@ -345,7 +344,7 @@ void NetService::pushCmd(const char * mData, int mDataLength, int mCmdType, int 
 				readedCmd->setTag(mTag);
 				readedCmd->setStatus(mStatus); // cmd status. 1 = success, 0 = false
 				readedCmd->copy(mData+2, mDataLength-2);	//扣除head 长度
-				cmdVector.push(std::move(*readedCmd.get()));
+				cmdVector.push_back(*readedCmd.get());
 				on_log("ActionID =%d type=%d,status =%d,data length=%d \n", mCmdType, mActionType, mStatus, mDataLength);
 			}
 			else if (mActionType == 0)

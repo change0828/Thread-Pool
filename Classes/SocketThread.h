@@ -30,7 +30,8 @@
 #define SOCKET_OK 0
 
 // thread
-#include "threadsafe_queue.h"
+#include <thread>
+#include "threadsafe_list.h"
 #include "Package.h"
 
 using namespace std;
@@ -91,9 +92,9 @@ private:
 	//close socket by user.
 	bool closeSocketByUser; 
 	//send buffer
-	threadsafe_queue<CPackage> sendList;
+	threadsafe_list<CPackage> sendList;
 	//recyle CPackage sended
-	threadsafe_queue<CPackage> recyleList;
+	threadsafe_list<CPackage> recyleList;
 	//message item
 	CPackage * receiveItem;
 

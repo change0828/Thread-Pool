@@ -82,7 +82,7 @@ void SocketThread::stopThread()
 	isReceiveOK = false;
 	isConnect = false;
 
-	sendList.push(CPackage());
+	sendList.push_back(CPackage());
 	//默认情况下，close()/closesocket() 会立即向网络中发送FIN包，不管输出缓冲区中是否还有数据，而shutdown() 会等输出缓冲区中的数据传输完毕再发送FIN包。
 	//也就意味着，调用 close()/closesocket() 将丢失输出缓冲区中的数据，而调用 shutdown() 不会。
 	//shutdown(_socket, SHUT_RDWR);
@@ -137,7 +137,7 @@ void SocketThread::addToSendBuffer(const char * mData,unsigned int mDataLength,i
 	_readBuffer->pushWord(mHeadType);
 	_readBuffer->copy(mData, mDataLength);
 
-	sendList.push(std::move(*_readBuffer.get()));
+	sendList.push_back(*_readBuffer.get());
 	std::cout << "count _readBuffer:" << _readBuffer.use_count() << std::endl;
 }
 
@@ -273,7 +273,7 @@ void SocketThread::sendThread()
 /////////////////////////////////////////// send start //////////////////////////////////////////
 
 		bool isSendOK = false;
-		int sendIndex = 0;
+		long sendIndex = 0;
 		int _length = 0;
 
 		//线程等待获取发送数据
@@ -314,12 +314,12 @@ void SocketThread::sendThread()
 			on_log("\nsend head = %d, size = %d", (int)data->readHead(), (int)data->readDword());
 
 			//printf("\n before ++ recyleList size is %d ", recyleList.size());
-			recyleList.push(std::move(*data));
+			recyleList.push_back(*data);
 			//printf("\n ++ recyleList size is %d ", recyleList.size());
 		}
 		else
 		{
-			sendList.push(std::move(*data));
+			sendList.push_back(*data);
 		}
 /////////////////////////////////////////// send end OK //////////////////////////////////////////
 	}

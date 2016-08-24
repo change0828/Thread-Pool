@@ -136,8 +136,8 @@ private:
 	std::vector<SocketThread*> removeArray;
 
 	//command already receive from server
-	threadsafe_queue<CPackage> cmdVector;
+	threadsafe_list<CPackage> cmdVector;
 	//recyle ByteArray used
-	threadsafe_queue<CPackage> recyleBuffer;
+	threadsafe_list<CPackage> recyleBuffer;
 };
 #endif
