@@ -49,8 +49,6 @@ public:
 
 	/**thread is running or not*/
 	bool getIsRunning();
-	/**socket is connect or not*/
-	bool getIsConnected();
 	/**get socket tag*/
 	int getTag();
 	/**is thread over*/
@@ -82,8 +80,6 @@ private:
 	char port[16];
 	//thread running or not
 	bool isRunning;
-	//connect or not
-	bool isConnect;
 	//receive header data ok or not
 	bool isReceiveHeaderOK;
 	//receive message ok or not

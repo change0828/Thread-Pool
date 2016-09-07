@@ -345,12 +345,12 @@ void NetService::pushCmd(const char * mData, int mDataLength, int mCmdType, int 
 				readedCmd->setStatus(mStatus); // cmd status. 1 = success, 0 = false
 				readedCmd->copy(mData+2, mDataLength-2);	//扣除head 长度
 				cmdVector.push_back(*readedCmd.get());
-				on_log("ActionID =%d type=%d,status =%d,data length=%d \n", mCmdType, mActionType, mStatus, mDataLength);
+				on_log("recv ActionID =%d type=%d,status =%d,data length=%d \n", mCmdType, mActionType, mStatus, mDataLength);
 			}
 			else if (mActionType == 0)
 			{
 				readedCmd.reset();
-				on_log("heart beat ActionID =%d ,data length=%d \n", mCmdType, mDataLength);
+				on_log("recv heart beat ActionID =%d ,data length=%d \n", mCmdType, mDataLength);
 			}
 		}
 	}

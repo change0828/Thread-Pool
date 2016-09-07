@@ -13,7 +13,6 @@ SocketThread::SocketThread(const char * mHost,const char * mPort,int mTag)
 	:tag(mTag)
     , bufLength(MAXMSGSIZE)
     , isRunning(false)
-    , isConnect(false)
     , isReceiveHeaderOK(false)
     , isReceiveOK(false)
 	, closeSocketByUser(false)
@@ -75,14 +74,14 @@ void SocketThread::startThread()
 
 void SocketThread::stopThread()
 {
-	//std::unique_lock<std::mutex> _lock(_mutex);
+	std::unique_lock<std::mutex> _lock(_mutex);
 	closeSocketByUser = true;
 	isRunning = false;
 	isReceiveHeaderOK = false;
 	isReceiveOK = false;
-	isConnect = false;
 
-	sendList.push_back(CPackage());
+	receiveItem->reuse();
+	sendList.push_back(*receiveItem);
 	//默认情况下，close()/closesocket() 会立即向网络中发送FIN包，不管输出缓冲区中是否还有数据，而shutdown() 会等输出缓冲区中的数据传输完毕再发送FIN包。
 	//也就意味着，调用 close()/closesocket() 将丢失输出缓冲区中的数据，而调用 shutdown() 不会。
 	//shutdown(_socket, SHUT_RDWR);
@@ -94,11 +93,6 @@ void SocketThread::stopThread()
 bool SocketThread::getIsRunning()
 {
 	return isRunning;
-};
-
-bool SocketThread::getIsConnected()
-{
-	return isConnect;
 };
 
 int SocketThread::getTag()
@@ -144,10 +138,6 @@ void SocketThread::addToSendBuffer(const char * mData,unsigned int mDataLength,i
 int SocketThread::connectServer()
 {
 	std::unique_lock<std::mutex> _lock(_mutex);
-	if (isConnect)
-	{
-		return 0;
-	}
 	if (INVALID_SOCKET!=_socket)
 	{
 		closesocket(_socket);
@@ -187,8 +177,7 @@ int SocketThread::connectServer()
 			on_log("连接失败 host %s, port %s errorcode：%d\n", \
 				host, port, _connect);
 			continue;
-		}
-		isConnect = true;
+		};
 		on_log("连接成功");
 		//IP 地址
 		if (AF_UNSPEC == curr->ai_family)
@@ -244,32 +233,6 @@ void SocketThread::sendThread()
 
 	while (isRunning)
 	{
-		if (!isConnect)
-		{
-			retCode = this->connectServer();
-			if (retCode == -1) {
-				comStatus = COM_CONNECT_FAILED ;
-			}
-			/////////////////////////////////////////
-			if (comStatus == COM_CONNECT_FAILED)
-			{
-				isExitThread = true;
-
-				///////send error info message //////////
-				receiveItem->reuse();//must set to reuse.
-
-				receiveItem->setTag(tag);
-				receiveItem->pushHead(COM_TCP);
-
-				receiveItem->pushDword(retCode);
-				receiveItem->pushByte(host,128);
-				receiveItem->pushByte(port,16);
-				receiveItem->pushWord(tag);
-				NetService::getInstance()->pushCmd(receiveItem->buff(),receiveItem->length(),COM_TCP,COM_TCP,tag,comStatus);
-
-				break;// exit thread
-			}
-		}
 /////////////////////////////////////////// send start //////////////////////////////////////////
 
 		bool isSendOK = false;
@@ -278,6 +241,10 @@ void SocketThread::sendThread()
 
 		//线程等待获取发送数据
 		auto data = sendList.wait_and_pop();
+		if (!isRunning)
+		{
+			break;
+		}
 
 		while (!isSendOK)
 		{
@@ -338,33 +305,6 @@ void SocketThread::recvThread()
 
 	while (isRunning)
 	{
-		if (!isConnect)
-		{
-			retCode = this->connectServer();
-			if (retCode == -1) {
-				comStatus = COM_CONNECT_FAILED ;
-			}
-			/////////////////////////////////////////
-			if (comStatus == COM_CONNECT_FAILED)
-			{
-				isExitThread = true;
-
-				///////send error info message //////////
-				receiveItem->reuse();//must set to reuse.
-
-				receiveItem->setTag(tag);
-				receiveItem->pushHead(COM_TCP);
-
-				receiveItem->pushDword(retCode);
-				receiveItem->pushByte(host,128);
-				receiveItem->pushByte(port,16);
-				receiveItem->pushWord(tag);
-				NetService::getInstance()->pushCmd(receiveItem->buff(),receiveItem->length(),COM_TCP,COM_TCP,tag,comStatus);
-
-				break;// exit thread
-			}
-		}
-
 /////////////////////////////////////// receive header data ///////////////////////////////////////
 		const int HEADER_BUFFER_SIZE = 4;
 		char headerBuffer[HEADER_BUFFER_SIZE];
@@ -431,7 +371,7 @@ void SocketThread::recvThread()
 
 				if (SOCKET_ERROR == rev || 0 == rev)
 				{
-					on_log("ReceiveHeader失败 tag %d, dataLength %d, errorcode：%d\n", \
+					on_log("Receive package 失败 tag %d, dataLength %d, errorcode：%d\n", \
 						tag, dataLength, rev);
 					this->handleError();
 					break;
