@@ -280,14 +280,10 @@ bool NetService::handleDelegates(CPackage *mCmd)
 
 		if (mCmd->getHead() == COM_TCP)
 		{
-			if (mCmd->getStatus() == COM_CONNECT_FAILED)
+			if (mCmd->getStatus() == COM_CONNECT_FAILED || mCmd->getStatus() == COM_SYS_ERROR)
 			{
 				this->removeSocket(mCmd->getTag());
 			}
-			//if (mCmd->getStatus() == COM_SYS_ERROR)
-			//{
-			//	this->removeSocket(mCmd->getTag());
-			//}
 
 			isCmdHandled = object->notifyResponseState(mCmd);
 

@@ -31,6 +31,7 @@
 
 // thread
 #include <thread>
+#include <future>
 #include "threadsafe_list.h"
 #include "Package.h"
 
@@ -55,10 +56,10 @@ public:
 	bool isThreadOver();
 
 	//cmd action data
-	void addToSendBuffer(const char * mData,unsigned int mDataLength,int mHeadType);
+	void addToSendBuffer(const char * mData, unsigned int mDataLength, int mHeadType);
 private:
 	SocketThread();
-	/**server operation ,return 0 if connect is ok,else -1*/
+	/**server operation ,return ture if connect is ok,else false*/
 	int connectServer();
 	/**handle error when socket has some exceptions*/
 	void handleError();
@@ -84,9 +85,12 @@ private:
 	bool isReceiveHeaderOK;
 	//receive message ok or not
 	bool isReceiveOK;
+	//多线程判断链接状态
+	std::shared_future<int> _connect;
+	std::packaged_task<int()> _connectTask;
 
 	//close socket by user.
-	bool closeSocketByUser; 
+	std::atomic_flag _closeSocketByUser;
 	//send buffer
 	threadsafe_list<CPackage> sendList;
 	//recyle CPackage sended

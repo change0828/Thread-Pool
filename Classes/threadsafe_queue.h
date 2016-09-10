@@ -1,6 +1,8 @@
 #pragma once
+#include <memory>
 #include <thread>
 #include <mutex>
+#include <condition_variable>
 
 template<typename T>
 class threadsafe_queue
@@ -30,6 +32,7 @@ private:
 		std::unique_ptr<node> old_head = std::move(head);
 		head = std::move(old_head->next);
 		--_size;
+		printf("--size %d name=%s \n", _size, typeid(*this).name());
 		return old_head;
 	}
 	std::unique_lock<std::mutex> wait_for_data()
@@ -97,7 +100,7 @@ public:
 	{
 		std::unique_ptr<node> const old_head = wait_pop_head(value);
 	}
-	void push_back(T new_value)
+	void push(T&& new_value)
 	{
 		std::shared_ptr<T> new_data(std::make_shared<T>(std::move(new_value)));
 		std::unique_ptr<node> p(new node);
@@ -109,6 +112,7 @@ public:
 			tail = new_tail;
 		}
 		++_size;
+		printf("++size %d name=%s \n", _size, typeid(*this).name());
 		data_cond.notify_one();
 	}
 	bool empty()
