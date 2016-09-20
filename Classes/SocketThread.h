@@ -32,6 +32,7 @@
 // thread
 #include <thread>
 #include <future>
+#include <atomic>
 #include "threadsafe_list.h"
 #include "Package.h"
 

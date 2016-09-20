@@ -19,6 +19,7 @@ SocketThread::SocketThread(const char * mHost,const char * mPort,int mTag)
 	, isRecvOver(false)
     , _socket(INVALID_SOCKET)
 {
+	_closeSocketByUser.clear();
 	recvBuf = new char[bufLength];
 	memset(recvBuf, 0, bufLength);
 
@@ -78,6 +79,7 @@ void SocketThread::stopThread()
 	isRunning = false;
 	isReceiveHeaderOK = false;
 	isReceiveOK = false;
+	_closeSocketByUser.test_and_set();
 
 	receiveItem->reuse();
 	sendList.push_back(*receiveItem);
