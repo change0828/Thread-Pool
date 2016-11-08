@@ -9,7 +9,7 @@
 
 extern int on_log(const char *format, ...);
 
-SocketThread::SocketThread(const char * mHost,const char * mPort,int mTag)
+SocketThread::SocketThread(const char * hostname, const char * ip, const char * port, int mTag)
 	:tag(mTag)
     , bufLength(MAXMSGSIZE)
     , isRunning(false)
@@ -25,11 +25,14 @@ SocketThread::SocketThread(const char * mHost,const char * mPort,int mTag)
 
 	receiveItem = new CPackage(256);
 	//handl host info
-	memset(host, 0, 128);
-	memcpy(host, mHost, strlen(mHost));
+	memset(_hostname, 0, 128);
+	memcpy(_hostname, hostname, strlen(hostname));
+	//handl ip info
+	memset(_ip, 0, 128);
+	memcpy(_ip, ip, strlen(ip));
 	//handl port info
-	memset(port, 0, 16);
-	memcpy(port, mPort, strlen(mPort));
+	memset(_port, 0, 16);
+	memcpy(_port, port, strlen(port));
 }
 
 SocketThread::~SocketThread(void)
@@ -144,29 +147,42 @@ int SocketThread::connectServer()
 		_socket=INVALID_SOCKET;
 	}
 	struct addrinfo hint, *curr; 
-	addrinfo *_addrinfo=nullptr;
+	addrinfo *_addrinfo = nullptr;
+
+	const char* addr[2] = {_hostname, _ip};
 
 	memset(&hint, 0, sizeof(hint)); 
 	hint.ai_flags = AI_CANONNAME;	//获取域名
 	hint.ai_family = AF_UNSPEC;		//
 	hint.ai_socktype = SOCK_STREAM; //数据流
-	on_log("域名解析 host %s, port %s\n",host,port);
-	int ret = getaddrinfo(host, port, &hint, &_addrinfo); 
-	if (SOCKET_OK!=ret) { 
-		/** 域名解析失败*/
-		on_log("域名解析失败 host %s, port %s\n", \
-			host, port);
-		return ret;
-	} 
+	for (int i=0;i<2;i++)
+	{
+		int ret = 0;
+		on_log("域名解析 host %s, port %s\n", addr[i], _port);
+		if (nullptr==_addrinfo)
+		{
+			ret = getaddrinfo(addr[i], _port, &hint, &_addrinfo);
+		}
+		else
+		{
+			ret = getaddrinfo(addr[i], _port, &hint, &_addrinfo->ai_next);
+		}
+		if (SOCKET_OK != ret) {
+			/** 域名解析失败*/
+			on_log("域名解析失败 host %s, port %s\n", \
+				addr[i], _port);
+			//return ret;
+		}
+	}
+
 	int _connect = 0;
-	struct sockaddr_in  *sockaddr_ipv4 = nullptr; 
+	struct sockaddr_in  *sockaddr_ipv4 = nullptr;
 	struct sockaddr_in6 *sockaddr_ipv6 = nullptr; 
-	for (curr = _addrinfo; curr != NULL; curr = curr->ai_next) { 
+	for (curr = _addrinfo; curr != nullptr; curr = curr->ai_next) { 
 		_socket = socket(curr->ai_family, curr->ai_socktype, curr->ai_protocol);
 		if (SOCKET_ERROR==_socket)
 		{
-			on_log("创建套接字失败 host %s, port %s errorcode：%d\n", \
-				host, port, _socket);
+			on_log("create socket faild errorcode：%d\n", _socket);
 			continue;
 		}
 
@@ -174,11 +190,10 @@ int SocketThread::connectServer()
 		_connect = connect(_socket, curr->ai_addr, (int)curr->ai_addrlen);
 		if (0!= _connect)
 		{
-			on_log("连接失败 host %s, port %s errorcode：%d\n", \
-				host, port, _connect);
+			on_log("connect faild errorcode：%d\n", _connect);
+			closesocket(_socket);
 			continue;
 		};
-		on_log("连接成功");
 		//IP 地址
 		if (AF_UNSPEC == curr->ai_family)
 		{
@@ -199,11 +214,13 @@ int SocketThread::connectServer()
 			inet_ntop(curr->ai_family, &sockaddr_ipv6->sin6_addr, _ipaddr, sizeof(_ipaddr));
 #endif
 		}
-		on_log("analysis IP：%s\n",_ipaddr);
+#if CC_PLATFORM_WP8!=CC_TARGET_PLATFORM
+		on_log("analysis IP：%s\n", _ipaddr);
+#endif
 		break;
     }
     freeaddrinfo(_addrinfo);
-	on_log("connectServer host %s port %s", host, port);
+	on_log("connectServer host %s ip %s port %s", _hostname, _ip, _port);
 	
 	return _connect;
 }
@@ -237,8 +254,9 @@ void SocketThread::sendThread()
 		receiveItem->pushHead(COM_TCP);
 
 		receiveItem->pushDword(-1);
-		receiveItem->pushByte(host, 128);
-		receiveItem->pushByte(port, 16);
+		receiveItem->pushByte(_hostname, 128);
+		receiveItem->pushByte(_ip, 128);
+		receiveItem->pushByte(_port, 16);
 		receiveItem->pushWord(tag);
 		NetService::getInstance()->pushCmd(receiveItem->buff(), receiveItem->length(), COM_TCP, COM_TCP, tag, COM_CONNECT_FAILED);
 	}

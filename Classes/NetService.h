@@ -77,7 +77,7 @@ public:
 	void removeAllDelegates(void);
 
 	/**new socket and spawn a new SocketThread instance*/
-	void newSocket(const char * hostname,const char * port,int mTag=0);
+	void newSocket(const char * hostname, const char* ip, const char * port, int mTag=0);
 	/**get SocketThread instance by tag*/
 	SocketThread * getSocketByTag(int mTag);
 	/**add SocketThread instance with tag*/

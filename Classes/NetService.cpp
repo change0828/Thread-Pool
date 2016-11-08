@@ -153,12 +153,12 @@ void NetService::removeAllDelegates(void)
 		delegateArray.clear();
 }
 
-void NetService::newSocket(const char *hostname, const char* port, int mTag)
+void NetService::newSocket(const char * hostname, const char* ip, const char * port, int mTag/* =0 */)
 {
 	SocketThread* _Socket = this->getSocketByTag(mTag);
 	if (nullptr==_Socket)
 	{
-		_Socket = new SocketThread(hostname, port, mTag);
+		_Socket = new SocketThread(hostname, ip, port, mTag);
 		_Socket->startThread();
 
 		sokcetArray.push_back(_Socket);

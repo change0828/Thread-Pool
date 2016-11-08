@@ -41,7 +41,7 @@ using namespace std;
 class SocketThread
 {
 public:
-	SocketThread(const char * hostname,const char * port,int mTag);
+	SocketThread(const char * hostname, const char * ip, const char * port, int mTag);
 	~SocketThread(void);
 
 	/**start thread*/
@@ -77,9 +77,11 @@ private:
 	// socket tag to be unique
 	int tag;
 	//host address
-	char host[128];
+	char _hostname[128];
+	//ip address
+	char _ip[128];
 	//host port number
-	char port[16];
+	char _port[16];
 	//thread running or not
 	bool isRunning;
 	//receive header data ok or not
