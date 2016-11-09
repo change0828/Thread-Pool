@@ -67,6 +67,8 @@ private:
 	/**thread functions*/
 	void sendThread();
 	void recvThread();
+    
+    void pushNetError(int COM_STATUS, char * errorinfo=0, int error=0, const char * host=nullptr, void * pointPath = nullptr);
 private:
 	//receive buffer,default size is MAXMSGSIZE
 	char * recvBuf;
@@ -111,4 +113,3 @@ private:
 	bool isSendOver;
 	bool isRecvOver;
 };
-

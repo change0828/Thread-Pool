@@ -26,7 +26,8 @@ enum COM_STATUS {
 	COM_SYS_ERROR = 4,//communication error
 	COM_DOWNLOADING = 5,//http downloading
 	COM_DOWNLOADING_OK=  6,//http downloading ok
-	COM_DOWNLOADING_FAILED =7//http downloading failed
+	COM_DOWNLOADING_FAILED =7,//http downloading failed
+	COM_DNS_ERROR=8,//
 };
 
 /**declare CmdHandleDelegate*/

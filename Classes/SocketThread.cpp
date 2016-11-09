@@ -4,10 +4,13 @@
 #include <string.h>
 #include <errno.h>
 #include <iostream>
+#include <locale>
+#include <codecvt>
 
 #define SIZE 100
 
 extern int on_log(const char *format, ...);
+extern char * sock_ntop( const  struct  sockaddr *sa, socklen_t salen);
 
 SocketThread::SocketThread(const char * hostname, const char * ip, const char * port, int mTag)
 	:tag(mTag)
@@ -23,6 +26,7 @@ SocketThread::SocketThread(const char * hostname, const char * ip, const char * 
 	recvBuf = new char[bufLength];
 	memset(recvBuf, 0, bufLength);
 
+	memset(_ipaddr, 0, 128);
 	receiveItem = new CPackage(256);
 	//handl host info
 	memset(_hostname, 0, 128);
@@ -151,49 +155,37 @@ int SocketThread::connectServer()
 
 	const char* addr[2] = {_hostname, _ip};
 
-	memset(&hint, 0, sizeof(hint)); 
-	hint.ai_flags = AI_CANONNAME;	//获取域名
+	memset(&hint, 0, sizeof(hint));
 	hint.ai_family = AF_UNSPEC;		//
 	hint.ai_socktype = SOCK_STREAM; //数据流
-	for (int i=0;i<2;i++)
+
+	int i = 0;
+	do 
 	{
-		int ret = 0;
 		on_log("域名解析 host %s, port %s\n", addr[i], _port);
-		if (nullptr==_addrinfo)
-		{
-			ret = getaddrinfo(addr[i], _port, &hint, &_addrinfo);
-		}
-		else
-		{
-			ret = getaddrinfo(addr[i], _port, &hint, &_addrinfo->ai_next);
-		}
+		int ret = getaddrinfo(addr[i], _port, &hint, &_addrinfo);
 		if (SOCKET_OK != ret) {
 			/** 域名解析失败*/
 			on_log("域名解析失败 host %s, port %s\n", \
 				addr[i], _port);
 			//return ret;
+			this->pushNetError(COM_DNS_ERROR, gai_strerrorA(ret), ret, addr[i], _addrinfo);
+			freeaddrinfo(_addrinfo);
+			continue;
 		}
-	}
+		else
+			break;
+	} while (++i<2);
 
-	int _connect = 0;
+
+	int _connect = -1;
 	struct sockaddr_in  *sockaddr_ipv4 = nullptr;
 	struct sockaddr_in6 *sockaddr_ipv6 = nullptr; 
-	for (curr = _addrinfo; curr != nullptr; curr = curr->ai_next) { 
-		_socket = socket(curr->ai_family, curr->ai_socktype, curr->ai_protocol);
-		if (SOCKET_ERROR==_socket)
-		{
-			on_log("create socket faild errorcode：%d\n", _socket);
+	for (curr = _addrinfo; curr != nullptr; curr = curr->ai_next)
+	{
+		if((_socket = socket(curr->ai_family, curr->ai_socktype, curr->ai_protocol))<0)
 			continue;
-		}
 
-		on_log("socket is : %d", _socket);
-		_connect = connect(_socket, curr->ai_addr, (int)curr->ai_addrlen);
-		if (0!= _connect)
-		{
-			on_log("connect faild errorcode：%d\n", _connect);
-			closesocket(_socket);
-			continue;
-		};
 		//IP 地址
 		if (AF_UNSPEC == curr->ai_family)
 		{
@@ -215,10 +207,20 @@ int SocketThread::connectServer()
 #endif
 		}
 #if CC_PLATFORM_WP8!=CC_TARGET_PLATFORM
-		on_log("analysis IP：%s\n", _ipaddr);
+		on_log("\t ip :%s\n", _ipaddr);
 #endif
-		break;
-    }
+
+
+		if((_connect = connect(_socket, curr->ai_addr, (int)curr->ai_addrlen))<0)
+		{
+			this->pushNetError(COM_CONNECT_FAILED, sock_ntop(curr->ai_addr,curr->ai_addrlen));
+			on_log("trying %s failiure \n",sock_ntop(curr->ai_addr,curr->ai_addrlen));
+			closesocket(_socket);
+			continue;
+		}else
+			break;
+	};
+
     freeaddrinfo(_addrinfo);
 	on_log("connectServer host %s ip %s port %s", _hostname, _ip, _port);
 	
@@ -244,23 +246,8 @@ void SocketThread::sendThread()
 {
 	_connectTask();
 	auto localConnect = _connect;
-	bool isConnect = (localConnect.get() == 0) ? true : false;
-	if (!isConnect)
-	{
-		///////send error info message //////////
-		receiveItem->reuse();//must set to reuse.
-
-		receiveItem->setTag(tag);
-		receiveItem->pushHead(COM_TCP);
-
-		receiveItem->pushDword(-1);
-		receiveItem->pushByte(_hostname, 128);
-		receiveItem->pushByte(_ip, 128);
-		receiveItem->pushByte(_port, 16);
-		receiveItem->pushWord(tag);
-		NetService::getInstance()->pushCmd(receiveItem->buff(), receiveItem->length(), COM_TCP, COM_TCP, tag, COM_CONNECT_FAILED);
-	}
-	else
+	auto result_connect = localConnect.get();
+	if (0==result_connect)
 	{
 		while (isRunning)
 		{
@@ -330,8 +317,8 @@ void SocketThread::recvThread()
 {
 	auto localConnect = _connect;
 	localConnect.wait();
-	bool isConnect = (localConnect.get() == 0) ? true : false;
-	if (isConnect)
+	auto result_connect = localConnect.get();
+	if (0==result_connect)
 	{
 		while (isRunning)
 		{
@@ -435,4 +422,22 @@ void SocketThread::recvThread()
 		}
 	}
 	isRecvOver = true;
+}
+
+void SocketThread::pushNetError(int COM_STATUS, char * errorinfo/* =nullptr */, int error/* =0 */, const char * host/* =nullptr */, void * pointPath /* = nullptr */)
+{
+	///////send error info message //////////
+	receiveItem->reuse();//must set to reuse.
+
+	receiveItem->setTag(tag);
+	receiveItem->pushHead(COM_TCP);
+
+	std::string strerror(errorinfo);
+
+	receiveItem->pushWord(1);//client 填充兼容
+	receiveItem->pushDword(strerror.length());
+	receiveItem->pushByte(strerror.c_str(), strerror.length());
+	receiveItem->pushDword(error);
+	receiveItem->pushByte(host, 128);
+	NetService::getInstance()->pushCmd(receiveItem->buff(), receiveItem->length(), COM_TCP, COM_TCP, tag, COM_STATUS);
 }
