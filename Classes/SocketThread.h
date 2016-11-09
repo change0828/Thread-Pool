@@ -68,7 +68,7 @@ private:
 	void sendThread();
 	void recvThread();
     
-    void pushNetError(int COM_STATUS, char * errorinfo=0, int error=0, const char * host=nullptr, void * pointPath = nullptr);
+    void pushNetError(int COM_STATUS, std::string errorinfo="", int error=0, const char * host=nullptr, void * pointPath = nullptr);
 private:
 	//receive buffer,default size is MAXMSGSIZE
 	char * recvBuf;

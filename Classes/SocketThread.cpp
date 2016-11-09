@@ -150,6 +150,9 @@ int SocketThread::connectServer()
 		closesocket(_socket);
 		_socket=INVALID_SOCKET;
 	}
+
+	int _connect = -1;
+
 	struct addrinfo hint, *curr; 
 	addrinfo *_addrinfo = nullptr;
 
@@ -169,59 +172,72 @@ int SocketThread::connectServer()
 			on_log("域名解析失败 host %s, port %s\n", \
 				addr[i], _port);
 			//return ret;
-			this->pushNetError(COM_DNS_ERROR, gai_strerrorA(ret), ret, addr[i], _addrinfo);
+			std::string strerror;
+#ifdef UNICODE
+			wstring ws(gai_strerror(ret));
+			strerror.append(ws.begin(),ws.end());
+#else
+			strerror = gai_strerror(ret);
+#endif  /* UNICODE */
+			this->pushNetError(COM_DNS_ERROR, strerror, ret, addr[i], _addrinfo);
 			freeaddrinfo(_addrinfo);
 			continue;
 		}
 		else
-			break;
+		{
+			struct sockaddr_in  *sockaddr_ipv4 = nullptr;
+			struct sockaddr_in6 *sockaddr_ipv6 = nullptr; 
+			for (curr = _addrinfo; curr != nullptr; curr = curr->ai_next)
+			{
+				if((_socket = socket(curr->ai_family, curr->ai_socktype, curr->ai_protocol))<0)
+					continue;
+
+				//IP 地址
+				if (AF_UNSPEC == curr->ai_family)
+				{
+				} 
+				else if (AF_INET == curr->ai_family)
+				{
+					sockaddr_ipv4 = reinterpret_cast<struct sockaddr_in *>( curr->ai_addr); 
+#if CC_PLATFORM_WP8!=CC_TARGET_PLATFORM
+					inet_ntop(curr->ai_family, &sockaddr_ipv4->sin_addr, _ipaddr, sizeof(_ipaddr));
+#else
+					inet_ntoa((in_addr)sockaddr_ipv4->sin_addr);
+#endif
+				}
+				else if (AF_INET6 == curr->ai_family)
+				{
+					sockaddr_ipv6 = reinterpret_cast<struct sockaddr_in6 *>( curr->ai_addr); 
+#if CC_PLATFORM_WP8!=CC_TARGET_PLATFORM
+					inet_ntop(curr->ai_family, &sockaddr_ipv6->sin6_addr, _ipaddr, sizeof(_ipaddr));
+#endif
+				}
+#if CC_PLATFORM_WP8!=CC_TARGET_PLATFORM
+				on_log("\t ip :%s\n", _ipaddr);
+#endif
+
+				if((_connect = connect(_socket, curr->ai_addr, (int)curr->ai_addrlen))<0)
+				{
+					on_log("trying %s failiure \n",sock_ntop(curr->ai_addr,curr->ai_addrlen));
+					closesocket(_socket);
+					continue;
+				}else
+					break;
+			};
+			freeaddrinfo(_addrinfo);
+			if (0==_connect)
+			{
+				break;
+			}
+		}
+
 	} while (++i<2);
 
-
-	int _connect = -1;
-	struct sockaddr_in  *sockaddr_ipv4 = nullptr;
-	struct sockaddr_in6 *sockaddr_ipv6 = nullptr; 
-	for (curr = _addrinfo; curr != nullptr; curr = curr->ai_next)
+	if (0>_connect)
 	{
-		if((_socket = socket(curr->ai_family, curr->ai_socktype, curr->ai_protocol))<0)
-			continue;
+		this->pushNetError(COM_CONNECT_FAILED);
+	}
 
-		//IP 地址
-		if (AF_UNSPEC == curr->ai_family)
-		{
-		} 
-		else if (AF_INET == curr->ai_family)
-		{
-			sockaddr_ipv4 = reinterpret_cast<struct sockaddr_in *>( curr->ai_addr); 
-#if CC_PLATFORM_WP8!=CC_TARGET_PLATFORM
-			inet_ntop(curr->ai_family, &sockaddr_ipv4->sin_addr, _ipaddr, sizeof(_ipaddr));
-#else
-			inet_ntoa((in_addr)sockaddr_ipv4->sin_addr);
-#endif
-		}
-		else if (AF_INET6 == curr->ai_family)
-		{
-			sockaddr_ipv6 = reinterpret_cast<struct sockaddr_in6 *>( curr->ai_addr); 
-#if CC_PLATFORM_WP8!=CC_TARGET_PLATFORM
-			inet_ntop(curr->ai_family, &sockaddr_ipv6->sin6_addr, _ipaddr, sizeof(_ipaddr));
-#endif
-		}
-#if CC_PLATFORM_WP8!=CC_TARGET_PLATFORM
-		on_log("\t ip :%s\n", _ipaddr);
-#endif
-
-
-		if((_connect = connect(_socket, curr->ai_addr, (int)curr->ai_addrlen))<0)
-		{
-			this->pushNetError(COM_CONNECT_FAILED, sock_ntop(curr->ai_addr,curr->ai_addrlen));
-			on_log("trying %s failiure \n",sock_ntop(curr->ai_addr,curr->ai_addrlen));
-			closesocket(_socket);
-			continue;
-		}else
-			break;
-	};
-
-    freeaddrinfo(_addrinfo);
 	on_log("connectServer host %s ip %s port %s", _hostname, _ip, _port);
 	
 	return _connect;
@@ -424,7 +440,7 @@ void SocketThread::recvThread()
 	isRecvOver = true;
 }
 
-void SocketThread::pushNetError(int COM_STATUS, char * errorinfo/* =nullptr */, int error/* =0 */, const char * host/* =nullptr */, void * pointPath /* = nullptr */)
+void SocketThread::pushNetError(int COM_STATUS, std::string errorinfo/* ="" */, int error/* =0 */, const char * host/* =nullptr */, void * pointPath /* = nullptr */)
 {
 	///////send error info message //////////
 	receiveItem->reuse();//must set to reuse.
@@ -432,12 +448,13 @@ void SocketThread::pushNetError(int COM_STATUS, char * errorinfo/* =nullptr */, 
 	receiveItem->setTag(tag);
 	receiveItem->pushHead(COM_TCP);
 
-	std::string strerror(errorinfo);
-
 	receiveItem->pushWord(1);//client 填充兼容
-	receiveItem->pushDword(strerror.length());
-	receiveItem->pushByte(strerror.c_str(), strerror.length());
-	receiveItem->pushDword(error);
-	receiveItem->pushByte(host, 128);
+	if (0!=error)
+	{
+		receiveItem->pushDword(errorinfo.length());
+		receiveItem->pushByte(errorinfo.c_str(), errorinfo.length());
+		receiveItem->pushDword(error);
+		receiveItem->pushByte(host, 128);
+	}
 	NetService::getInstance()->pushCmd(receiveItem->buff(), receiveItem->length(), COM_TCP, COM_TCP, tag, COM_STATUS);
 }

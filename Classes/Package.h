@@ -84,7 +84,7 @@ private:
 	char *		m_pBuff;
 	type_word	m_siHead;
 	/** 缓存区的大小*/
-	type_word	m_siSize;
+	type_dword	_size;
 	//读取位置
 	int   m_nRdptr;
 	//写入位置

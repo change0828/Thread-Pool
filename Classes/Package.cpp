@@ -3,7 +3,7 @@
 using namespace std;
 
 CPackage::CPackage(type_word size /* = 256 */)
-	:m_siSize(size)
+	:_size(size)
 	,m_sBuffSize(0)
 	,m_siHead(0)
 	,m_nRdptr(0)
@@ -11,15 +11,15 @@ CPackage::CPackage(type_word size /* = 256 */)
 	, _tag(0)
 	, _status(0)
 {
-	m_pBuff = new char[m_siSize];
-	memset(m_pBuff, 0, m_siSize);
+	m_pBuff = new char[_size];
+	memset(m_pBuff, 0, _size);
 }
 
 CPackage::CPackage(CPackage&& other)
 {
 	m_pBuff = other.m_pBuff;
 	other.m_pBuff = nullptr;
-	m_siSize = other.m_siSize;
+	_size = other._size;
 	m_sBuffSize = other.m_sBuffSize;
 	m_siHead = other.m_siHead;
 	m_nRdptr = other.m_nRdptr;
@@ -53,7 +53,7 @@ char * CPackage::buffSurplus()
 
 type_word CPackage::size(void)
 {
-	return m_siSize;
+	return _size;
 }
 type_word CPackage::length(void)
 {
@@ -179,13 +179,13 @@ void CPackage::resize(unsigned int mLength)
 	int tmpLength = this->length();
 	char *tmpContent = m_pBuff;
 
-	m_siSize  += INCRSIZE ;
-	while (m_siSize < mLength) {
-		m_siSize += INCRSIZE;
+	_size  += INCRSIZE ;
+	while (_size < mLength) {
+		_size += INCRSIZE;
 	}
 
-	m_pBuff = new char[m_siSize];
-	memset(m_pBuff,0,m_siSize);
+	m_pBuff = new char[_size];
+	memset(m_pBuff,0,_size);
 	memcpy(m_pBuff, tmpContent, tmpLength);
 
 	delete[] tmpContent;
